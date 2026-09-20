@@ -1,6 +1,6 @@
 import { z } from "zod";
 export const Versions = {
-  template: "fullbleed-1.0",
+  template: "fullbleed-1.1",
   prompt: "editorial-1.1",
   font: "Pretendard-1.3.9",
 };
