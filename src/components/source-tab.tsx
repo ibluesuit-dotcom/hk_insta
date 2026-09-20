@@ -78,10 +78,6 @@ export function SourceTab({ s }: { s: Studio }) {
         >
           사진 키워드 추천받기
         </button>
-        <p className="hint">
-          현재 통합 원문에서 단어 4개를 추천합니다. 근거가 부족하면 더 적게
-          제안하며, 사진 검색을 실행한 결과는 아닙니다.
-        </p>
         {p.locks.keywords && (
           <button
             className="tiny"
@@ -132,10 +128,6 @@ export function SourceTab({ s }: { s: Studio }) {
         aria-label="메인 카드 배경 이미지 첨부"
       >
         <h3>메인 카드 배경 이미지</h3>
-        <p>
-          첫 번째 카드(표지)에 사용할 사진을 첨부하세요. 문안 생성 전에도 넣을
-          수 있습니다.
-        </p>
         <CoverPhotoUpload s={s} />
 
         {p.photo && (
@@ -211,11 +203,6 @@ export function SourceTab({ s }: { s: Studio }) {
         onChange={(e) => set("sourceTitle", e.target.value)}
         placeholder="기사 제목"
       />
-      <small>
-        원문 제목이 있으면 원제를 사용하며 가장자리의 알려진 코너명과 표기만
-        정리합니다. [속보]·[단독]은 유지합니다. 제목이 없으면 AI가 본문으로
-        작성합니다.
-      </small>
       <label>
         추출 원문 확인·수정{" "}
         <span>{p.source.length.toLocaleString()}자 / 60,000자</span>
@@ -253,10 +240,6 @@ export function SourceTab({ s }: { s: Studio }) {
         value={p.direction}
         onChange={(e) => set("direction", e.target.value)}
       />
-      <div className="hint">
-        입력 중에는 AI를 호출하지 않습니다. 아래 적용 버튼을 눌러야 문안에
-        반영됩니다.
-      </div>
       {p.direction !== p.appliedDirection && p.copy.headline && (
         <p className="warn">
           ● 새 방향 미반영 · 전체 또는 선택 필드에 적용하세요.
@@ -265,7 +248,6 @@ export function SourceTab({ s }: { s: Studio }) {
       <div className="count-setting">
         <div>
           <strong>본문 페이지 수</strong>
-          <p>표지는 1장으로 유지됩니다</p>
         </div>
         <select
           aria-label="본문 페이지 수"

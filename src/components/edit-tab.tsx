@@ -13,10 +13,6 @@ export function EditTab({ s }: { s: Studio }) {
         <div>
           <span className="eyebrow">EDIT YOUR STORY</span>
           <h2>문구와 사진을 다듬으세요</h2>
-          <p className="hint">
-            입력은 이 브라우저의 초안입니다. 미리보기 갱신을 누르면 모든 편집
-            내용을 함께 저장하고 전체 카드를 렌더합니다.
-          </p>
         </div>
         <span className="pill">02 / 편집</span>
       </div>
@@ -152,10 +148,6 @@ function CoverFields({ s }: { s: Studio }) {
         />
         보조제목 끄기
       </label>
-      <p className="hint">
-        숨겨도 부제 문구는 보존됩니다. 미리보기 갱신을 누르면 숨김 설정까지
-        저장됩니다. 미리보기 갱신으로 렌더하세요.
-      </p>
       <Evidence s={s} quotes={p.copy.kickerEvidence} />
       <hr />
       <label>

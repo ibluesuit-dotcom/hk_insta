@@ -215,11 +215,6 @@ export function PreviewPanel({ s }: { s: Studio }) {
       >
         내보내기
       </a>
-      <p className="preview-note">
-        미리보기와 다운로드에 같은 PNG를 사용합니다.
-        <br />
-        Pretendard 1.3.9 · 1080 × 1350px
-      </p>
     </aside>
   );
 }
