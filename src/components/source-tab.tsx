@@ -233,6 +233,14 @@ export function SourceTab({ s }: { s: Studio }) {
         }
         placeholder="기사 본문이나 방송 스크립트를 붙여넣으세요. 숫자, 시점, 조건이 빠지지 않았는지 확인하세요."
       />
+      <div className="row">
+        <button disabled={!p.source.trim()} onClick={() => s.copySource()}>
+          기사 복사하기
+        </button>
+        <p className="hint" aria-live="polite">
+          {s.sourceCopyStatus}
+        </p>
+      </div>
       <hr />
       <div className="section-title">
         <div>

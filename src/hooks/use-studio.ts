@@ -39,6 +39,7 @@ export function useStudio() {
   const [preview, setPreview] = useState("phone");
   const [width, setWidth] = useState(360);
   const [clipboardStatus, setClipboardStatus] = useState("");
+  const [sourceCopyStatus, setSourceCopyStatus] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [health, setHealth] = useState<any>({});
@@ -374,6 +375,19 @@ export function useStudio() {
         : "복사하지 못했습니다. 검색어를 선택해 직접 복사해 주세요.",
     );
   }
+  async function copySource() {
+    const text = p?.source ?? "";
+    if (!text.trim()) {
+      setSourceCopyStatus("복사할 원문이 없습니다.");
+      return;
+    }
+    const copied = await copyText(text);
+    setSourceCopyStatus(
+      copied
+        ? `원문 ${text.length.toLocaleString()}자를 복사했습니다.`
+        : "복사하지 못했습니다. 원문을 선택해 직접 복사해 주세요.",
+    );
+  }
   function pageField(k: string, v: any) {
     stage(`page:${index - 1}:${k}`, (p) => {
       (p.copy.pages[index - 1] as any)[k] = v;
@@ -470,6 +484,8 @@ export function useStudio() {
     set,
     copy,
     copyKeyword,
+    sourceCopyStatus,
+    copySource,
     pageField,
     photo,
     files,
