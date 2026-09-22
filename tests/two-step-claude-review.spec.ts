@@ -107,7 +107,8 @@ test("P1 title field equals rendered lines, slash escape, manual break controls 
   );
   expect(await drafts(page, p.id)).toEqual({});
   // Manual: move the boundaries.
-  const manual = "9\\/18 한은 기준금리 / 동결…원\\/달러 환율 / 1,400원 돌파하나";
+  const manual =
+    "9\\/18 한은 기준금리 / 동결…원\\/달러 환율 / 1,400원 돌파하나";
   await headline(page).fill(manual);
   await expect(headline(page)).toHaveValue(manual);
   await expect(download(page)).not.toHaveAttribute("href", /.+/);
@@ -126,9 +127,14 @@ test("P1 title field equals rendered lines, slash escape, manual break controls 
     out + "/p1-manual-cover.png",
     await (await request.get(`/api/projects/${p.id}/png/0`)).body(),
   );
-  await page.screenshot({ path: out + "/p1-editor-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: out + "/p1-editor-desktop.png",
+    fullPage: true,
+  });
   // Back to automatic by removing separators: renderer picks, field reflects it.
-  await headline(page).fill("9\\/18 한은 기준금리 동결…원\\/달러 환율 1,400원 돌파하나");
+  await headline(page).fill(
+    "9\\/18 한은 기준금리 동결…원\\/달러 환율 1,400원 돌파하나",
+  );
   const auto = await (await update(page)).json();
   expect(auto.coverLayout.lines).toEqual(p.coverLayout.lines);
   await expect(headline(page)).toHaveValue(
@@ -136,7 +142,9 @@ test("P1 title field equals rendered lines, slash escape, manual break controls 
   );
   // Invalid: 4 lines -> client warning, render rejected, edits kept.
   await headline(page).fill("가 / 나 / 다 / 라");
-  await expect(page.getByRole("alert").filter({ hasText: "최대 3줄" })).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "최대 3줄" }),
+  ).toBeVisible();
   const bad = await update(page);
   expect(bad.ok()).toBe(false);
   await expect(headline(page)).toHaveValue("가 / 나 / 다 / 라");
@@ -249,17 +257,26 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   await expect(page.getByLabel("부제")).toHaveValue("검수 부제");
   await expect(download(page)).not.toHaveAttribute("href", /.+/);
   await expect(page.locator(".stale")).toBeVisible();
-  expect((await request.get(`/api/projects/${p.id}/download`)).status()).toBe(400);
+  expect((await request.get(`/api/projects/${p.id}/download`)).status()).toBe(
+    400,
+  );
   expect((await request.get(`/api/projects/${p.id}/png/0`)).status()).toBe(400);
-  await page.screenshot({ path: out + "/p3-render-failed.png", fullPage: true });
+  await page.screenshot({
+    path: out + "/p3-render-failed.png",
+    fullPage: true,
+  });
   await page.unroute("**/render");
 
   // 3) real renderer failure (body overflow) then recovery.
   await page.getByRole("button", { name: "본문 1", exact: true }).click();
-  await page.getByLabel("페이지 본문").fill("넘치는 본문 문장입니다. ".repeat(40));
+  await page
+    .getByLabel("페이지 본문")
+    .fill("넘치는 본문 문장입니다. ".repeat(40));
   const overflow = await update(page);
   expect(overflow.ok()).toBe(false);
-  await expect(page.getByRole("alert").first()).toContainText("본문 1장이 넘칩니다");
+  await expect(page.getByRole("alert").first()).toContainText(
+    "본문 1장이 넘칩니다",
+  );
   await expect(page.getByLabel("페이지 본문")).toHaveValue(/넘치는 본문/);
   await expect(download(page)).not.toHaveAttribute("href", /.+/);
   await page.getByLabel("페이지 본문").fill("검수 본문 하나");
@@ -288,7 +305,11 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   expect(entries["caption.txt"].toString()).toBe("검수 캡션 #배치");
   expect(entries["alt-text.txt"].toString()).toContain("01: 검수 표지 대체");
   expect(entries["alt-text.txt"].toString()).toContain("03: 검수 본문2 대체");
-  for (const [i, name] of ["01-cover.png", "02-body.png", "03-body.png"].entries()) {
+  for (const [i, name] of [
+    "01-cover.png",
+    "02-body.png",
+    "03-body.png",
+  ].entries()) {
     const preview = await (await request.get(done.renders[i])).body();
     expect(entries[name].equals(preview)).toBe(true);
     fs.writeFileSync(out + "/p3-" + name, entries[name]);
@@ -300,18 +321,25 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   const put = await request.put(`/api/projects/${p.id}`, { data: cur });
   expect(put.ok()).toBe(true);
   const rev = (await put.json()).revision;
-  expect((await request.get(`/api/projects/${p.id}/download`)).status()).toBe(400);
+  expect((await request.get(`/api/projects/${p.id}/download`)).status()).toBe(
+    400,
+  );
   expect((await request.get(`/api/projects/${p.id}/png/1`)).status()).toBe(400);
   const partial = await request.post(`/api/projects/${p.id}/render`, {
     data: { revision: rev, only: 1 },
   });
   expect(partial.ok()).toBe(true);
-  expect((await request.get(`/api/projects/${p.id}/download`)).status()).toBe(400);
+  expect((await request.get(`/api/projects/${p.id}/download`)).status()).toBe(
+    400,
+  );
   expect((await request.get(`/api/projects/${p.id}/png/1`)).status()).toBe(400);
   // Archive must not offer ZIP for this stale project.
   await page.reload();
   await page.getByRole("button", { name: /작업 보관함/ }).click();
-  const card = page.locator(".archive-card").filter({ hasText: "총 3장" }).first();
+  const card = page
+    .locator(".archive-card")
+    .filter({ hasText: "총 3장" })
+    .first();
   await expect(card).toBeVisible();
   await expect(card.getByRole("link", { name: /ZIP/ })).toHaveCount(0);
   await expect(page.getByText(/승인/)).toHaveCount(0);
@@ -334,25 +362,46 @@ test("P4 anonymous export denied; no approval wording; desktop/mobile screenshot
   // export is the element right after refresh
   const order = await page.evaluate(() => {
     const b = [...document.querySelectorAll(".preview-panel > *")];
-    const i = b.findIndex((e) => e.textContent?.includes("미리보기 갱신") && e.tagName === "BUTTON");
+    const i = b.findIndex(
+      (e) => e.textContent?.includes("미리보기 갱신") && e.tagName === "BUTTON",
+    );
     return b[i + 1]?.textContent || "";
   });
   expect(order).toContain("내보내기");
-  await page.screenshot({ path: out + "/p4-desktop-cover.png", fullPage: true });
+  await page.screenshot({
+    path: out + "/p4-desktop-cover.png",
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "본문 1", exact: true }).click();
   await page.getByLabel("페이지 제목").fill("초안 상태 확인");
-  await page.screenshot({ path: out + "/p4-desktop-body-draft.png", fullPage: true });
+  await page.screenshot({
+    path: out + "/p4-desktop-body-draft.png",
+    fullPage: true,
+  });
   for (const w of [390, 320]) {
     await page.setViewportSize({ width: w, height: 844 });
-    await page.screenshot({ path: out + `/p4-mobile-${w}.png`, fullPage: true });
+    await page.screenshot({
+      path: out + `/p4-mobile-${w}.png`,
+      fullPage: true,
+    });
     const metrics = await page.evaluate(() => ({
       doc: document.documentElement.scrollWidth,
       win: window.innerWidth,
       wide: [...document.querySelectorAll(".editor *, .preview-panel *")]
         .filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1)
         .slice(0, 12)
-        .map((e) => e.tagName + "." + e.className + ":" + Math.round(e.getBoundingClientRect().right)),
+        .map(
+          (e) =>
+            e.tagName +
+            "." +
+            e.className +
+            ":" +
+            Math.round(e.getBoundingClientRect().right),
+        ),
     }));
-    fs.writeFileSync(out + `/p4-mobile-${w}.json`, JSON.stringify(metrics, null, 2));
+    fs.writeFileSync(
+      out + `/p4-mobile-${w}.json`,
+      JSON.stringify(metrics, null, 2),
+    );
   }
 });

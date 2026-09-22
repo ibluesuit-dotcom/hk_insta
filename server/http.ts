@@ -28,6 +28,9 @@ export const errorHandler: ErrorRequestHandler = (
 ) =>
   res.status(error.code === "ENOENT" ? 404 : error.status || 400).json({
     code: error.code || "INPUT",
+    ...(Array.isArray(error.suggestions) && error.suggestions.length
+      ? { suggestions: error.suggestions }
+      : {}),
     message:
       error instanceof z.ZodError
         ? "입력 형식이 올바르지 않습니다. 문안·본문 장수·잠금·사진·폰트(54~60px)를 확인하세요."

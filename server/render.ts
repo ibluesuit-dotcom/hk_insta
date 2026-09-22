@@ -1,4 +1,4 @@
-import { headlinePlans } from "./headline-plans";
+import { headlinePlans, shortHeadlines } from "./headline-plans";
 import { candidateLines } from "../shared/linebreak";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -230,7 +230,56 @@ export async function render(p: Project, only?: number) {
                 : p.highlightFrom,
           },
         );
-        if (fit) throw new Error(fit);
+        if (fit) {
+          // Offer shorter titles the card can actually hold. Suggestions are
+          // measured here, never applied: the user picks one and re-renders.
+          let suggestions: string[] = [];
+          if (semanticPlans)
+            try {
+              const candidates = await shortHeadlines(headline.text);
+              suggestions = await page.evaluate((candidates) => {
+                const el = document.getElementById("headline")!;
+                const measure = document.createElement("span");
+                Object.assign(measure.style, {
+                  position: "absolute",
+                  visibility: "hidden",
+                  whiteSpace: "pre",
+                  fontWeight: "800",
+                  letterSpacing: "-.025em",
+                });
+                document.body.append(measure);
+                const fits = (text: string) =>
+                  [88, 80, 72].some((size) => {
+                    measure.style.fontSize = size + "px";
+                    const width = (s: string) => {
+                      measure.textContent = s;
+                      return measure.getBoundingClientRect().width;
+                    };
+                    const lines = (window as any).candidateLines(
+                      text,
+                      width,
+                      952,
+                      () => {},
+                    );
+                    return (
+                      lines.length > 0 &&
+                      lines.length <= 3 &&
+                      lines.every((l: string) => width(l) <= 952)
+                    );
+                  });
+                const ok = candidates.filter(fits);
+                measure.remove();
+                el.textContent = "";
+                return ok;
+              }, candidates);
+            } catch {
+              /* Suggestions are optional: report the layout failure itself. */
+            }
+          throw Object.assign(new Error(fit), {
+            code: "RENDER",
+            ...(suggestions.length ? { suggestions } : {}),
+          });
+        }
         coverLayout = {
           headline: p.copy.headline,
           mode: p.copy.headlineMode,

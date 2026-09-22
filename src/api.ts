@@ -16,6 +16,7 @@ export async function api(url: string, method = "GET", body?: any) {
     const e = await res.json();
     throw Object.assign(new Error(`${e.code || "오류"} · ${e.message}`), {
       code: e.code,
+      suggestions: e.suggestions,
     });
   }
   return res.json();

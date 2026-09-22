@@ -40,6 +40,7 @@ export function useStudio() {
   const [width, setWidth] = useState(360);
   const [clipboardStatus, setClipboardStatus] = useState("");
   const [sourceCopyStatus, setSourceCopyStatus] = useState("");
+  const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [health, setHealth] = useState<any>({});
@@ -228,6 +229,8 @@ export function useStudio() {
       return true;
     } catch (e) {
       setError((e as Error).message);
+      const offered = (e as any).suggestions;
+      if (Array.isArray(offered)) setHeadlineSuggestions(offered);
       return false;
     } finally {
       busyRef.current = false;
@@ -375,6 +378,11 @@ export function useStudio() {
         : "복사하지 못했습니다. 검색어를 선택해 직접 복사해 주세요.",
     );
   }
+  function applyHeadlineSuggestion(text: string) {
+    copy("headline", text);
+    setHeadlineSuggestions([]);
+    setError("");
+  }
   async function copySource() {
     const text = p?.source ?? "";
     if (!text.trim()) {
@@ -484,6 +492,8 @@ export function useStudio() {
     set,
     copy,
     copyKeyword,
+    headlineSuggestions,
+    applyHeadlineSuggestion,
     sourceCopyStatus,
     copySource,
     pageField,

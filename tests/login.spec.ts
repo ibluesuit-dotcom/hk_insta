@@ -5,7 +5,10 @@ import sharp from "sharp";
 const REVIEW_USERNAME = "test";
 const REVIEW_PASSWORD = "review-pass-2026";
 // The default suite uses the mock server without authentication.
-test.skip(process.env.REVIEW_AUTH !== "1", "Run with the isolated authenticated login-review config");
+test.skip(
+  process.env.REVIEW_AUTH !== "1",
+  "Run with the isolated authenticated login-review config",
+);
 const evidence = process.env.E2E_ARTIFACT_DIR + "/login";
 const loginForm = (page: Page) =>
   page.getByRole("form", { name: "공용 계정 로그인" });
@@ -30,11 +33,17 @@ test("최초 화면: 가운데 박스에 로그인 폼, 만들기 버튼 없음,
 }) => {
   await page.goto("/");
   await expect(loginForm(page)).toBeVisible();
-  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "로그인", exact: true }),
+  ).toBeEnabled();
   await expect(createButtons(page)).toHaveCount(0);
   await expect(page.getByLabel("통합 원문")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "카드 스튜디오" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /작업 보관함/ })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "카드 스튜디오" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: /작업 보관함/ }),
+  ).toBeDisabled();
   for (const [w, h] of [
     [2048, 1000],
     [1512, 1100],
@@ -89,7 +98,10 @@ test("로그인 전 API·업로드·렌더 파일 차단, 정적 페이지는 �
   const create = await request.post("/api/projects");
   expect(create.status()).toBe(401);
   const session = await request.get("/api/session");
-  expect(await session.json()).toEqual({ authenticated: false, configured: true });
+  expect(await session.json()).toEqual({
+    authenticated: false,
+    configured: true,
+  });
   expect((await request.get("/")).status()).toBe(200);
   const fake = await request.get("/api/projects", {
     headers: { cookie: "studio_session=" + "0".repeat(64) },
@@ -102,7 +114,9 @@ test("로그인 전 API·업로드·렌더 파일 차단, 정적 페이지는 �
 test("로그인 실패: 오류 메시지, 폼 유지, 여전히 차단", async ({ page }) => {
   await page.goto("/");
   await login(page, "wrong-password");
-  await expect(page.getByRole("alert")).toContainText("아이디 또는 비밀번호를 확인하세요");
+  await expect(page.getByRole("alert")).toContainText(
+    "아이디 또는 비밀번호를 확인하세요",
+  );
   await expect(loginForm(page)).toBeVisible();
   await expect(page.getByLabel("통합 원문")).toHaveCount(0);
   expect((await page.request.get("/api/projects")).status()).toBe(401);
@@ -124,10 +138,14 @@ test("로그인 성공: 스튜디오 원문 탭 자동 진입, 세션 쿠키 속
   await login(page);
   await expect(page.getByLabel("통합 원문")).toBeVisible();
   await expect(loginForm(page)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /01.*원문과 제작 방향/ })).toHaveClass(/selected/);
+  await expect(
+    page.getByRole("button", { name: /01.*원문과 제작 방향/ }),
+  ).toHaveClass(/selected/);
   await expect(page.getByLabel("작업 이름")).toHaveValue("새로운 뉴스 카드");
   await expect(createButtons(page)).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "카드 스튜디오" })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "카드 스튜디오" }),
+  ).toBeEnabled();
   const cookie = (await page.context().cookies()).find(
     (c) => c.name === "studio_session",
   )!;
@@ -153,23 +171,34 @@ test("성공 후 직접 편집·자동 저장, 새로고침 시 같은 작업 �
   await login(page);
   await expect(page.getByLabel("통합 원문")).toBeVisible();
   const count = await projectCount(page);
-  const id = await page.evaluate(() => sessionStorage.getItem("studio-project"));
+  const id = await page.evaluate(() =>
+    sessionStorage.getItem("studio-project"),
+  );
   expect(id).toBeTruthy();
   await page.getByLabel("작업 이름").fill("로그인 검수 작업");
   await page.getByLabel("원문 제목", { exact: true }).fill("금리와 수출 동향");
   await page
     .getByLabel("통합 원문")
-    .fill("한국은행은 금리와 원화 동향을 설명했다. 수출과 반도체 관련 지표를 함께 확인했다. 잠정치는 앞으로 달라질 수 있다.");
-  await expect(page.locator(".project-bar small")).toHaveText("서버 저장 완료", {
-    timeout: 10000,
-  });
+    .fill(
+      "한국은행은 금리와 원화 동향을 설명했다. 수출과 반도체 관련 지표를 함께 확인했다. 잠정치는 앞으로 달라질 수 있다.",
+    );
+  await expect(page.locator(".project-bar small")).toHaveText(
+    "서버 저장 완료",
+    {
+      timeout: 10000,
+    },
+  );
   for (let i = 0; i < 2; i++) {
     await page.reload();
     await expect(page.getByLabel("통합 원문")).toBeVisible();
     await expect(loginForm(page)).toHaveCount(0);
     await expect(page.getByLabel("작업 이름")).toHaveValue("로그인 검수 작업");
-    await expect(page.getByLabel("원문 제목", { exact: true })).toHaveValue("금리와 수출 동향");
-    expect(await page.evaluate(() => sessionStorage.getItem("studio-project"))).toBe(id);
+    await expect(page.getByLabel("원문 제목", { exact: true })).toHaveValue(
+      "금리와 수출 동향",
+    );
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("studio-project")),
+    ).toBe(id);
     expect(await projectCount(page)).toBe(count);
   }
   await page.screenshot({ path: `${evidence}/studio-after-reload.png` });

@@ -70,9 +70,7 @@ test("source → photo → PNG ZIP → archive duplicate restore", async ({
   expect(display.renderRevision).toBe(display.revision);
 
   const zip = page.waitForEvent("download");
-  await page
-    .getByRole("link", { name: "내보내기", exact: true })
-    .click();
+  await page.getByRole("link", { name: "내보내기", exact: true }).click();
   await (
     await zip
   ).saveAs(

@@ -14,7 +14,7 @@ const example =
 const expected =
   "“금리 인상은 문제도 아니다” 코스피, 외국인·기관 매수에 6800선 안착";
 
-test("conservative edge runs preserve protected and unknown factual brackets", () => {
+test("edge runs drop every bracket except the protected tags", () => {
   assert.equal(normalize(example), expected);
   assert.equal(
     normalize("[특징주][속보][fn오전시황] 6800선 [마감시황][단독][특징주]"),
@@ -24,16 +24,15 @@ test("conservative edge runs preserve protected and unknown factual brackets", (
     normalize("[단독][특징주][속보] 제목 [단독][마감시황][속보]"),
     "[단독][속보] 제목 [단독][속보]",
   );
-  for (const title of [
-    "[2026년 9월] 수출 12.5% 증가 [잠정치]",
-    "수출 [특징주] 6800선",
-    "[새 코너] 제목 [임의 분류]",
-    "[특징주][팩트][특징주] 내용",
-  ])
-    assert.equal(
-      normalize(title),
-      title === "[특징주][팩트][특징주] 내용" ? "[팩트][특징주] 내용" : title,
-    );
+  assert.equal(
+    normalize("[마켓무버의 국장 힌트] 코스피 6800선 [잠정치]"),
+    "코스피 6800선",
+  );
+  assert.equal(normalize("[2026년 9월] 수출 12.5% 증가"), "수출 12.5% 증가");
+  assert.equal(normalize("[새 코너] 제목 [임의 분류]"), "제목");
+  assert.equal(normalize("[특징주][팩트][특징주] 내용"), "내용");
+  // Brackets inside the headline are content, not corner labels.
+  assert.equal(normalize("수출 [특징주] 6800선"), "수출 [특징주] 6800선");
 });
 test("typography preserves omissions, apostrophes, digits, words and terminal ellipses", () => {
   assert.equal(
@@ -114,7 +113,11 @@ test("full response/cache enforcement, no-AI title candidate, preflight and lock
     assert.equal(candidate.copy.headline, expected);
     assert.equal(candidate.usage, null);
     assert.match(candidate.model, /AI 미사용/);
-    const slashCandidate = await generate({ ...p, sourceTitle: "2026/09/18 美/中 1/4분기" }, "headline", "");
+    const slashCandidate = await generate(
+      { ...p, sourceTitle: "2026/09/18 美/中 1/4분기" },
+      "headline",
+      "",
+    );
     assert.equal(slashCandidate.copy.headline, "2026/09/18 美/中 1/4분기");
     assert.equal(slashCandidate.copy.headlineMode, "literal");
     p.copy.headline = "수동 잠금 제목 / 유지";
@@ -149,9 +152,13 @@ test("full response/cache enforcement, no-AI title candidate, preflight and lock
 });
 
 test("literal source slashes, legacy manual breaks, migration and staged metadata isolation", async () => {
-  const { headlineLayout, migrateCover, projectSchema } = await import("../shared/model");
+  const { headlineLayout, migrateCover, projectSchema } =
+    await import("../shared/model");
   const { draftItem, applyDrafts } = await import("../shared/editor-drafts");
-  for (const title of ["2026/09/18 코스피 6800선 안착", "美/中 갈등/환율/수출 1/4분기"]) {
+  for (const title of [
+    "2026/09/18 코스피 6800선 안착",
+    "美/中 갈등/환율/수출 1/4분기",
+  ]) {
     const p = blank();
     Object.assign(p.copy, sourceHeadline(title));
     const layout = headlineLayout(p.copy.headline, p.copy.headlineMode);
@@ -160,13 +167,23 @@ test("literal source slashes, legacy manual breaks, migration and staged metadat
     assert.equal(reloaded.copy.headlineMode, "literal");
     p.headlineBreaks = title.replaceAll("/", "\n");
     assert.equal(migrateCover(p).copy.headline, title);
-    assert.equal(applyDrafts(p, { headline: { "copy.headline": "수동 / 제목" } }).copy.headlineMode, "manual");
+    assert.equal(
+      applyDrafts(p, { headline: { "copy.headline": "수동 / 제목" } }).copy
+        .headlineMode,
+      "manual",
+    );
     const old = blank();
     old.copy.headline = "수동 / 제목";
     const candidate = { ...old, copy: mergeCopy(old, p.copy, "headline") };
     const patch = JSON.parse(JSON.stringify(draftItem(candidate, "headline")));
-    assert.equal(applyDrafts(old, { headline: patch }).copy.headlineMode, "literal");
-    assert.equal(applyDrafts(old, { kicker: patch }).copy.headlineMode, undefined);
+    assert.equal(
+      applyDrafts(old, { headline: patch }).copy.headlineMode,
+      "literal",
+    );
+    assert.equal(
+      applyDrafts(old, { kicker: patch }).copy.headlineMode,
+      undefined,
+    );
     for (const scope of ["all", "headline"]) {
       old.locks.headline = true;
       assert.equal(mergeCopy(old, p.copy, scope).headlineMode, undefined);
@@ -174,7 +191,11 @@ test("literal source slashes, legacy manual breaks, migration and staged metadat
       assert.equal(mergeCopy(p, old.copy, scope).headlineMode, "literal");
     }
   }
-  assert.deepEqual(headlineLayout("수동 / 제목"), { text: "수동 제목", manual: "수동\n제목", error: "" });
+  assert.deepEqual(headlineLayout("수동 / 제목"), {
+    text: "수동 제목",
+    manual: "수동\n제목",
+    error: "",
+  });
   const legacy = blank();
   legacy.copy.headline = "수동 제목";
   legacy.headlineBreaks = "수동\n제목";

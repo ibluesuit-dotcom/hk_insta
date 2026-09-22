@@ -89,6 +89,20 @@ function CoverFields({ s }: { s: Studio }) {
         /는 줄바꿈, {"\\/"}는 원문 슬래시입니다. 최대 3줄이며 렌더된 줄바꿈을
         표시합니다.
       </p>
+      {!!s.headlineSuggestions.length && (
+        <div className="headline-suggestions">
+          <strong>카드 폭에 맞게 줄인 제목</strong>
+          {s.headlineSuggestions.map((text) => (
+            <button
+              key={text}
+              disabled={p.locks.headline}
+              onClick={() => s.applyHeadlineSuggestion(text)}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
       {headlineLayout(p.copy.headline, p.copy.headlineMode).error && (
         <p className="warn" role="alert">
           {headlineLayout(p.copy.headline, p.copy.headlineMode).error}

@@ -29,11 +29,15 @@ const clauseTitle = (lines: string[]) => lines[0] + lines.slice(1).join(" ");
 
 test("real AI clause cuts after attached ellipses preserve every original character", () => {
   for (const lines of clauseCases) {
-    assert.deepEqual(validateHeadlinePlans(clauseTitle(lines), output(lines)), [lines]);
+    assert.deepEqual(validateHeadlinePlans(clauseTitle(lines), output(lines)), [
+      lines,
+    ]);
   }
   for (const mark of ["…", "……", "...", "......"]) {
     const lines = ["증시 상승" + mark, "투자 심리 회복"];
-    assert.deepEqual(validateHeadlinePlans(lines.join(""), output(lines)), [lines]);
+    assert.deepEqual(validateHeadlinePlans(lines.join(""), output(lines)), [
+      lines,
+    ]);
   }
   for (const lines of [
     ["삼성전자, 3.", "4% 급등"],
@@ -42,10 +46,14 @@ test("real AI clause cuts after attached ellipses preserve every original charac
     ["증시 상승…", "…투자 심리 회복"],
     ["“증시 상승…", "”도 호재"],
     ["“증시 상승…”,", "도 호재"],
-  ]) assert.throws(() => validateHeadlinePlans(lines.join(""), output(lines)));
-  assert.throws(() => validateHeadlinePlans(clauseTitle(clauseCases[0]), output([
-    "삼성전자, 3.4% 급등 마감...", clauseCases[0][1],
-  ])));
+  ])
+    assert.throws(() => validateHeadlinePlans(lines.join(""), output(lines)));
+  assert.throws(() =>
+    validateHeadlinePlans(
+      clauseTitle(clauseCases[0]),
+      output(["삼성전자, 3.4% 급등 마감...", clauseCases[0][1]]),
+    ),
+  );
 });
 
 test("AI cut validation preserves exact source slices, attached quotations and particles", () => {
@@ -138,28 +146,59 @@ test("renderer uses valid AI plans and rejects invalid responses without heurist
     const request = JSON.parse(body);
     requests.push(request);
     const title = JSON.parse(request.input).headline;
+    // The renderer asks for shorter titles only after a layout failure.
+    if (String(request.instructions).includes("짧게 줄인")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "resp_test",
+          object: "response",
+          created_at: 0,
+          status: "completed",
+          model: "gpt-6-astra",
+          output: [
+            {
+              type: "message",
+              id: "msg_short",
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({ headlines: ["매우 긴 구절 넘침"] }),
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      return;
+    }
     const clause = clauseCases.find((lines) => clauseTitle(lines) === title);
-    const layouts = clause ? output(clause) : title.startsWith("거절")
-      ? null
-      : title.startsWith("불일치")
-        ? output(["원문을 바꾼 잘못된 제목"])
-      : title.startsWith("넘침")
-        ? output([title])
-        : {
-            layouts: [
-              {
-                lines: oilLines.map((s, i) =>
-                  i === 0 ? "유가 101달러 돌파에" : s,
-                ),
-              },
-              {
-                lines: [
-                  "유가 101달러 돌파에 한미",
-                  "증시 긴장'100달러 시나리오'도",
+    const layouts = clause
+      ? output(clause)
+      : title.startsWith("거절")
+        ? null
+        : title.startsWith("불일치")
+          ? output(["원문을 바꾼 잘못된 제목"])
+          : title.startsWith("넘침")
+            ? output([title])
+            : {
+                layouts: [
+                  {
+                    lines: oilLines.map((s, i) =>
+                      i === 0 ? "유가 101달러 돌파에" : s,
+                    ),
+                  },
+                  {
+                    lines: [
+                      "유가 101달러 돌파에 한미",
+                      "증시 긴장'100달러 시나리오'도",
+                    ],
+                  },
                 ],
-              },
-            ],
-          };
+              };
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
@@ -225,20 +264,98 @@ test("renderer uses valid AI plans and rejects invalid responses without heurist
     assert.equal(p.copy.headline, "불일치 원/달러 환율 1,400원 돌파");
     assert.equal(calls, 3);
     p.copy.headline = "넘침 " + "매우 긴 구절 ".repeat(30);
-    await assert.rejects(render(p, 0), /카드 폭/);
-    assert.equal(calls, 4);
+    await assert.rejects(render(p, 0), (e: any) => {
+      assert.match(e.message, /카드 폭/);
+      // Measured suggestions travel with the failure; the title is untouched.
+      assert.deepEqual(e.suggestions, ["매우 긴 구절 넘침"]);
+      return true;
+    });
+    assert.equal(p.copy.headline, "넘침 " + "매우 긴 구절 ".repeat(30));
+    assert.equal(calls, 5);
     for (const lines of clauseCases) {
       p.copy.headline = clauseTitle(lines);
       result = await render(p, 0);
       assert.deepEqual(result.coverLayout?.lines, lines);
       assert.equal(result.coverLayout?.headline, p.copy.headline);
-      const cached = JSON.parse(await fs.readFile(path.join(sandbox, "cache",
-        "headline-layout-" + headlinePlanCacheKey(p.copy.headline) + ".json"), "utf8"));
+      const cached = JSON.parse(
+        await fs.readFile(
+          path.join(
+            sandbox,
+            "cache",
+            "headline-layout-" +
+              headlinePlanCacheKey(p.copy.headline) +
+              ".json",
+          ),
+          "utf8",
+        ),
+      );
       assert.deepEqual(cached, output(lines));
     }
-    assert.equal(calls, 6);
+    assert.equal(calls, 7);
   } finally {
     service.close();
     delete process.env.OPENAI_BASE_URL;
   }
+});
+
+const { validateShortHeadlines, shortHeadlines, shortHeadlineCacheKey } =
+  await import("../server/headline-plans");
+const long =
+  "금리 인하 기대에도 불구하고 코스피는 6,800선에서 12.5% 급등 마감했다";
+
+test("short headline suggestions keep the source facts and stay shorter", () => {
+  assert.deepEqual(
+    validateShortHeadlines(long, {
+      headlines: [
+        "코스피 6,800선 12.5% 급등",
+        " 코스피 6,800선 12.5% 급등 ",
+        "코스피 12.5% 급등 마감",
+      ],
+    }),
+    ["코스피 6,800선 12.5% 급등", "코스피 12.5% 급등 마감"],
+  );
+  // Invented numbers, newlines, manual break marks and non-shortening rewrites
+  // are dropped rather than offered to the user.
+  assert.deepEqual(
+    validateShortHeadlines(long, {
+      headlines: [
+        "코스피 7,000선 돌파",
+        "코스피\n급등",
+        "코스피/급등",
+        long + " 추가",
+        "코스피 6,800선 마감",
+      ],
+    }),
+    ["코스피 6,800선 마감"],
+  );
+  for (const headlines of [[], ["코스피 9,999선 급등"], [""]])
+    assert.throws(
+      () => validateShortHeadlines(long, { headlines }),
+      /짧은 제목/,
+    );
+});
+
+test("short headline suggestions are cached per headline and never applied", async () => {
+  let calls = 0;
+  const request = async () => {
+    calls++;
+    return { headlines: ["코스피 6,800선 12.5% 급등"] };
+  };
+  assert.deepEqual(await shortHeadlines(long, request), [
+    "코스피 6,800선 12.5% 급등",
+  ]);
+  assert.deepEqual(await shortHeadlines(long, request), [
+    "코스피 6,800선 12.5% 급등",
+  ]);
+  assert.equal(calls, 1);
+  const filename = path.join(
+    sandbox,
+    "cache",
+    "headline-short-" + shortHeadlineCacheKey(long) + ".json",
+  );
+  await fs.writeFile(filename, JSON.stringify({ headlines: ["9,999선 급등"] }));
+  assert.deepEqual(await shortHeadlines(long, request), [
+    "코스피 6,800선 12.5% 급등",
+  ]);
+  assert.equal(calls, 2);
 });

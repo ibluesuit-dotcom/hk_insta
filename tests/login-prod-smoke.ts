@@ -4,7 +4,9 @@ const BASE = "https://card.redevpartners.net";
 const OUT = process.argv[2];
 const result: Record<string, unknown> = {};
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 2048, height: 1000 } });
+const ctx = await browser.newContext({
+  viewport: { width: 2048, height: 1000 },
+});
 const page = await ctx.newPage();
 const dialogs: string[] = [];
 page.on("dialog", (d) => dialogs.push(d.type()));
@@ -35,7 +37,12 @@ result.overflow = await page.evaluate(
 await page.screenshot({ path: OUT });
 // API (브라우저 컨텍스트, 쿠키 없음)
 const api: Record<string, unknown> = {};
-for (const p of ["/api/session", "/api/projects", "/uploads/unknown", "/renders/unknown"]) {
+for (const p of [
+  "/api/session",
+  "/api/projects",
+  "/uploads/unknown",
+  "/renders/unknown",
+]) {
   const r = await ctx.request.get(BASE + p);
   api[p] = { status: r.status(), body: await r.text() };
 }
@@ -48,8 +55,12 @@ const alert = page.getByRole("alert");
 await alert.waitFor({ state: "visible", timeout: 15000 });
 result.failAlert = (await alert.textContent())?.trim();
 result.formStillVisible = await form.isVisible();
-result.sessionCookieAfterFail = (await ctx.cookies()).some((c) => c.name === "studio_session");
-result.projectsAfterFail = (await ctx.request.get(BASE + "/api/projects")).status();
+result.sessionCookieAfterFail = (await ctx.cookies()).some(
+  (c) => c.name === "studio_session",
+);
+result.projectsAfterFail = (
+  await ctx.request.get(BASE + "/api/projects")
+).status();
 result.dialogs = dialogs;
 await browser.close();
 console.log(JSON.stringify(result, null, 2));

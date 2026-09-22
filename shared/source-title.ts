@@ -1,41 +1,17 @@
 import type { Copy } from "./model";
 
-// Deliberately closed list: unknown labels and factual brackets are content.
-const corners = new Set([
-  "fn오전시황",
-  "fn오후시황",
-  "fn마감시황",
-  "특징주",
-  "마감시황",
-  "오전시황",
-  "오후시황",
-  "개장시황",
-  "장중시황",
-  "증시시황",
-]);
 const protectedTags = new Set(["속보", "단독"]);
 
 export function normalizeSourceTitle(sourceTitle: string): string {
   let title = sourceTitle.replace(/\s+/g, " ").trim();
-  // Scan the contiguous bracket runs at both edges. Protected tags survive and
-  // permit adjacent corner removal; any unknown bracket stops the scan.
-  const cleanRun = (run: string, reverse: boolean) => {
-    const tags = [...run.matchAll(/\[[^\[\]]+\]/g)];
-    if (reverse) tags.reverse();
-    let stopped = false;
-    const removed = new Set<number>();
-    for (const match of tags) {
-      const label = match[0].slice(1, -1).trim();
-      if (stopped || protectedTags.has(label)) continue;
-      if (corners.has(label)) removed.add(match.index!);
-      else stopped = true;
-    }
-    return run.replace(/\[[^\[\]]+\]/g, (tag, offset) =>
-      removed.has(offset) ? "" : tag,
+  // Every bracket in the contiguous runs at both edges is a corner label, so
+  // only the protected tags survive. Brackets elsewhere are headline content.
+  const cleanRun = (run: string) =>
+    run.replace(/\[[^\[\]]+\]/g, (tag) =>
+      protectedTags.has(tag.slice(1, -1).trim()) ? tag : "",
     );
-  };
-  title = title.replace(/^(?:\[[^\[\]]+\]\s*)+/, (run) => cleanRun(run, false));
-  title = title.replace(/(?:\s*\[[^\[\]]+\])+$/, (run) => cleanRun(run, true));
+  title = title.replace(/^(?:\[[^\[\]]+\]\s*)+/, cleanRun);
+  title = title.replace(/(?:\s*\[[^\[\]]+\])+$/, cleanRun);
   // Only paired quotes. A single quote inside a word is an apostrophe, not a pair.
   title = title.replace(/"([^"\n]+)"/g, "“$1”");
   title = title.replace(

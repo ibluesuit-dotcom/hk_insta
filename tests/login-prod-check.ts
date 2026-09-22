@@ -43,11 +43,15 @@ await start();
 const browser = await chromium.launch();
 try {
   for (const host of ["127.0.0.1", "localhost"]) {
-    const page = await browser.newPage({ viewport: { width: 1512, height: 1100 } });
+    const page = await browser.newPage({
+      viewport: { width: 1512, height: 1100 },
+    });
     await page.goto(`http://${host}:${port}/`);
     await page.getByLabel("아이디").fill("test");
     await page.getByLabel("비밀번호").fill(password);
-    const response = page.waitForResponse((r) => r.url().endsWith("/api/login"));
+    const response = page.waitForResponse((r) =>
+      r.url().endsWith("/api/login"),
+    );
     await page.getByRole("button", { name: "로그인", exact: true }).click();
     const setCookie = (await (await response).headersArray())
       .filter((h) => h.name.toLowerCase() === "set-cookie")
@@ -63,7 +67,9 @@ try {
       secureFlagInHeader: /;\s*Secure/i.test(setCookie),
       cookieStored: cookies.some((c) => c.name === "studio_session"),
       studioEntered: entered,
-      error: entered ? "" : await page.locator(".error, [role=alert]").allInnerTexts(),
+      error: entered
+        ? ""
+        : await page.locator(".error, [role=alert]").allInnerTexts(),
     };
     await page.screenshot({ path: `${evidence}/prod-${host}.png` });
     if (host === "127.0.0.1" && entered) {

@@ -2,14 +2,18 @@
 // REVIEW_MATCH=new-card-review.spec.ts 로 격리 실행한다. 제품 코드는 건드리지 않는다.
 import { test, expect, Page } from "@playwright/test";
 import fs from "node:fs/promises";
-test.skip(process.env.REVIEW_AUTH !== "1", "Run with the isolated authenticated login-review config");
+test.skip(
+  process.env.REVIEW_AUTH !== "1",
+  "Run with the isolated authenticated login-review config",
+);
 const evidence = process.env.E2E_ARTIFACT_DIR + "/new-card";
 const photo = "design_handoff_news_card_fullbleed/PYH2026090110410005100.jpg";
 const source =
   "한국은행은 금리와 원화 동향을 설명했다. 수출과 반도체 관련 지표를 함께 확인했다. 잠정치는 앞으로 달라질 수 있다.";
 const newCard = (page: Page) =>
   page.getByRole("button", { name: "+ 새 카드 만들기", exact: true });
-const urlInput = (page: Page) => page.getByPlaceholder(/기사 주소를 입력하세요/);
+const urlInput = (page: Page) =>
+  page.getByPlaceholder(/기사 주소를 입력하세요/);
 const activeId = (page: Page) =>
   page.evaluate(() => sessionStorage.getItem("studio-project"));
 async function login(page: Page) {
@@ -26,10 +30,16 @@ test.beforeAll(async () => {
   await fs.mkdir(evidence, { recursive: true });
 });
 
-test("로그인 전 숨김, 로그인 후 표시, 데스크톱·모바일 버튼 맞춤", async ({ page }) => {
+test("로그인 전 숨김, 로그인 후 표시, 데스크톱·모바일 버튼 맞춤", async ({
+  page,
+}) => {
   await page.goto("/");
-  await expect(page.getByRole("form", { name: "공용 계정 로그인" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /새 카드 만들기/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("form", { name: "공용 계정 로그인" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /새 카드 만들기/ }),
+  ).toHaveCount(0);
   await login(page);
   await expect(newCard(page)).toBeVisible();
   for (const [w, h] of [
@@ -47,11 +57,15 @@ test("로그인 전 숨김, 로그인 후 표시, 데스크톱·모바일 버튼
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
-    console.log(`fit ${w}: btn=${JSON.stringify(b)} h1=${JSON.stringify(h1)} overflow=${overflow}`);
+    console.log(
+      `fit ${w}: btn=${JSON.stringify(b)} h1=${JSON.stringify(h1)} overflow=${overflow}`,
+    );
     // 390px 이하의 가로 넘침(+92px)은 버튼과 무관한 기존 .editor 최소 너비 문제(버튼 숨김 시에도 동일)라 단언하지 않는다.
     if (w >= 1000) expect(overflow, `${w}px 가로 넘침`).toBeLessThanOrEqual(0);
     expect(b.x).toBeGreaterThanOrEqual(head.x - 1);
-    expect(b.x + b.width).toBeLessThanOrEqual(Math.min(w, head.x + head.width) + 1);
+    expect(b.x + b.width).toBeLessThanOrEqual(
+      Math.min(w, head.x + head.width) + 1,
+    );
     expect(b.y).toBeGreaterThanOrEqual(head.y - 1);
     expect(b.y + b.height).toBeLessThanOrEqual(head.y + head.height + 1);
     // 한 줄 라벨 (줄바꿈 없음) 및 제목과 겹치지 않음
@@ -63,7 +77,9 @@ test("로그인 전 숨김, 로그인 후 표시, 데스크톱·모바일 버튼
   }
 });
 
-test("플러시 후 새 카드, 새 필드 비어 있음, 새로고침 유지, 보관함 재열기 시 초안 복원", async ({ page }) => {
+test("플러시 후 새 카드, 새 필드 비어 있음, 새로고침 유지, 보관함 재열기 시 초안 복원", async ({
+  page,
+}) => {
   await login(page);
   const oldId = await activeId(page);
   await urlInput(page).fill("https://example.com/old-article");
@@ -75,7 +91,9 @@ test("플러시 후 새 카드, 새 필드 비어 있음, 새로고침 유지, �
   await render;
   await page.getByRole("button", { name: "02문안·사진 편집" }).click();
   await page.getByLabel("부제", { exact: true }).fill("미반영 부제 초안");
-  await expect(page.getByRole("link", { name: "내보내기", exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(
+    page.getByRole("link", { name: "내보내기", exact: true }),
+  ).toHaveAttribute("aria-disabled", "true");
 
   // 저장 대기 중인 직접 편집 직후(650ms 자동저장 전) 곧바로 새 카드 클릭 → 먼저 PUT, 그다음 POST
   const order: string[] = [];
@@ -106,14 +124,24 @@ test("플러시 후 새 카드, 새 필드 비어 있음, 새로고침 유지, �
   await expect(page.getByLabel("원문 제목", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("통합 원문")).toHaveValue("");
   await expect(page.getByAltText("메인 카드 배경 이미지")).toHaveCount(0);
-  await expect(page.getByLabel("작업 이름")).not.toHaveValue("이전 작업 · 플러시 확인");
+  await expect(page.getByLabel("작업 이름")).not.toHaveValue(
+    "이전 작업 · 플러시 확인",
+  );
   const fresh = await (await page.request.get("/api/projects/" + newId)).json();
   expect(fresh.photo).toBeFalsy();
   expect(fresh.sourceUrl).toBe("");
-  expect(await page.evaluate((id) => localStorage.getItem("editor-drafts:" + id), newId)).toBeNull();
+  expect(
+    await page.evaluate(
+      (id) => localStorage.getItem("editor-drafts:" + id),
+      newId,
+    ),
+  ).toBeNull();
   // 이전 작업의 초안은 localStorage 에 그대로
   expect(
-    await page.evaluate((id) => localStorage.getItem("editor-drafts:" + id), oldId),
+    await page.evaluate(
+      (id) => localStorage.getItem("editor-drafts:" + id),
+      oldId,
+    ),
   ).toContain("미반영 부제 초안");
   await page.screenshot({ path: `${evidence}/new-card-blank.png` });
 
@@ -131,13 +159,17 @@ test("플러시 후 새 카드, 새 필드 비어 있음, 새로고침 유지, �
     .locator(".archive-card", { hasText: "이전 작업 · 플러시 확인" })
     .getByRole("button", { name: "이어서 편집" })
     .click();
-  await expect(page.getByLabel("작업 이름")).toHaveValue("이전 작업 · 플러시 확인");
+  await expect(page.getByLabel("작업 이름")).toHaveValue(
+    "이전 작업 · 플러시 확인",
+  );
   expect(await activeId(page)).toBe(oldId);
   await page.getByRole("button", { name: "01원문과 제작 방향" }).click();
   await expect(urlInput(page)).toHaveValue("https://example.com/old-article");
   await expect(page.getByAltText("메인 카드 배경 이미지")).toBeVisible();
   await page.getByRole("button", { name: "02문안·사진 편집" }).click();
-  await expect(page.getByLabel("부제", { exact: true })).toHaveValue("미반영 부제 초안");
+  await expect(page.getByLabel("부제", { exact: true })).toHaveValue(
+    "미반영 부제 초안",
+  );
 
   // 이전 작업에서 새로고침 → 같은 작업·링크·사진·초안 유지, 새 프로젝트 생성 없음
   await page.reload();
@@ -147,7 +179,9 @@ test("플러시 후 새 카드, 새 필드 비어 있음, 새로고침 유지, �
   await expect(urlInput(page)).toHaveValue("https://example.com/old-article");
   await expect(page.getByAltText("메인 카드 배경 이미지")).toBeVisible();
   await page.getByRole("button", { name: "02문안·사진 편집" }).click();
-  await expect(page.getByLabel("부제", { exact: true })).toHaveValue("미반영 부제 초안");
+  await expect(page.getByLabel("부제", { exact: true })).toHaveValue(
+    "미반영 부제 초안",
+  );
   await page.screenshot({ path: `${evidence}/old-restored.png` });
 });
 
@@ -163,14 +197,18 @@ test("처리 중 더블클릭은 POST 1회만", async ({ page }) => {
   });
   await newCard(page).dblclick();
   await expect(newCard(page)).toBeDisabled();
-  await newCard(page).click({ force: true }).catch(() => {});
+  await newCard(page)
+    .click({ force: true })
+    .catch(() => {});
   await newCard(page).evaluate((el: HTMLButtonElement) => el.click());
   await expect(newCard(page)).toBeEnabled({ timeout: 10000 });
   expect(posts).toBe(1);
   expect((await projects(page)).length).toBe(before + 1);
 });
 
-test("실패 시 이전 작업 유지: POST 실패 / 플러시(PUT) 실패", async ({ page }) => {
+test("실패 시 이전 작업 유지: POST 실패 / 플러시(PUT) 실패", async ({
+  page,
+}) => {
   await login(page);
   const oldId = await activeId(page);
   await urlInput(page).fill("https://example.com/keep-me");
@@ -215,12 +253,16 @@ test("실패 시 이전 작업 유지: POST 실패 / 플러시(PUT) 실패", asy
         })
       : route.continue(),
   );
-  await page.getByLabel("원문 제목", { exact: true }).fill("저장되지 않은 제목");
+  await page
+    .getByLabel("원문 제목", { exact: true })
+    .fill("저장되지 않은 제목");
   await newCard(page).click();
   await expect(page.getByRole("alert")).toContainText("저장 실패 모의");
   expect(posted).toBe(false);
   expect(await activeId(page)).toBe(oldId);
-  await expect(page.getByLabel("원문 제목", { exact: true })).toHaveValue("저장되지 않은 제목");
+  await expect(page.getByLabel("원문 제목", { exact: true })).toHaveValue(
+    "저장되지 않은 제목",
+  );
   await expect(urlInput(page)).toHaveValue("https://example.com/keep-me");
   expect((await projects(page)).length).toBe(before);
   await page.screenshot({ path: `${evidence}/failure-preserved.png` });

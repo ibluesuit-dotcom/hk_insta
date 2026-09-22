@@ -263,7 +263,8 @@ export function applyValidated(p: Project, scope: string, value: unknown) {
   if (scope === "all" || scope === "keywords")
     copy.keywords = groundedKeywords(copy.keywords, p.source);
   if (scope === "all" || scope === "headline") {
-    if (p.sourceTitle.trim()) Object.assign(copy, sourceHeadline(p.sourceTitle));
+    if (p.sourceTitle.trim())
+      Object.assign(copy, sourceHeadline(p.sourceTitle));
     else copy.headlineMode = "manual";
   }
   return copy;
