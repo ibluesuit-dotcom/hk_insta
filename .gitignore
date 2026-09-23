@@ -8,3 +8,9 @@ playwright-report/
 .DS_Store
 .omc/
 *.zip
+
+# 공개 저장소에 올리지 않는 것: 검수 스크린샷, 언론사 사진, 서버 배포 정보
+docs/**/*.png
+design_handoff_news_card_fullbleed/*.jpg
+deploy/
+docs/deploy-vps.md

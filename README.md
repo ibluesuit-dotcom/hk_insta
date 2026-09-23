@@ -17,7 +17,7 @@ npm start
 
 ### OpenAI 설정
 
-Responses API의 **`gpt-6-astra` 고정** 모델과 Structured Outputs를 사용합니다. 환경 변수 `OPENAI_API_KEY`가 우선이며, 없으면 사용자에게 재사용 승인받은 `/Users/wony/Documents/shorts/.env`에서 `OPENAI_API_KEY`만 읽습니다. 키는 서버 메모리에만 존재하며 파일을 수정·복사하거나 클라이언트에 전달하지 않습니다. 외부 파일 경로는 `OPENAI_ENV_FILE`로 변경할 수 있습니다. 새 키 입력 UI는 없습니다.
+Responses API의 **`gpt-6-astra` 고정** 모델과 Structured Outputs를 사용합니다. 환경 변수 `OPENAI_API_KEY`가 우선이며, 없으면 사용자가 지정한 외부 `.env` 파일(`OPENAI_ENV_FILE`)에서 `OPENAI_API_KEY`만 읽습니다. 키는 서버 메모리에만 존재하며 파일을 수정·복사하거나 클라이언트에 전달하지 않습니다. 외부 파일 경로는 `OPENAI_ENV_FILE`로 변경할 수 있습니다. 새 키 입력 UI는 없습니다.
 
 **본문 문안 생성의 실제 API 품질·비용은 별도 검증이 필요합니다.** 제목의 의미 단위 줄바꿈은 기존 계정의 실제 API 응답과 카드 렌더를 확인했습니다. 계정에 모델 접근 권한이 없으면 AI 오류가 표시됩니다.
 
