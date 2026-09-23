@@ -14,3 +14,4 @@ docs/**/*.png
 design_handoff_news_card_fullbleed/*.jpg
 deploy/
 docs/deploy-vps.md
+docs/

@@ -1,6 +1,6 @@
 // 운영 HTTPS smoke 검수 (읽기 전용, 잘못된 로그인 1회만 시도)
 import { chromium } from "@playwright/test";
-const BASE = "https://card.redevpartners.net";
+const BASE = process.env.PROD_BASE || "http://127.0.0.1:4310";
 const OUT = process.argv[2];
 const result: Record<string, unknown> = {};
 const browser = await chromium.launch();

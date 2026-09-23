@@ -1,4 +1,5 @@
 import { sourceHeadline } from "../shared/source-title";
+import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -19,7 +20,8 @@ export function key() {
   try {
     return dotenv.parse(
       fs.readFileSync(
-        process.env.OPENAI_ENV_FILE || "/Users/wony/Documents/shorts/.env",
+        process.env.OPENAI_ENV_FILE ||
+          path.join(os.homedir(), "Documents/shorts/.env"),
       ),
     ).OPENAI_API_KEY;
   } catch {
