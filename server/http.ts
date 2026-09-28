@@ -7,14 +7,31 @@ import type {
 import { z } from "zod";
 import { Project, projectSchema, migrateCover } from "../shared/model";
 
+// Handlers still running, counted separately from open connections: an AI
+// generation keeps running (and later saves) even if the browser disconnected.
+let inflight = 0;
+const idleWaiters: Array<() => void> = [];
+export function whenIdle(): Promise<void> {
+  return inflight === 0
+    ? Promise.resolve()
+    : new Promise((resolve) => idleWaiters.push(resolve));
+}
+
 // Forward async handler rejections to the error handler.
 type Params = Record<string, string>;
 export const wrap =
   (
     fn: (req: Request<Params>, res: Response) => unknown,
   ): RequestHandler<Params> =>
-  (req, res, next) =>
-    Promise.resolve(fn(req, res)).catch(next);
+  (req, res, next) => {
+    inflight++;
+    Promise.resolve()
+      .then(() => fn(req, res))
+      .catch(next)
+      .finally(() => {
+        if (--inflight === 0) idleWaiters.splice(0).forEach((done) => done());
+      });
+  };
 
 export function validateProject(body: unknown): Project {
   return migrateCover(projectSchema.parse(body));
