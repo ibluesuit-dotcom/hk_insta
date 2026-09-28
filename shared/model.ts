@@ -1,7 +1,7 @@
 import { z } from "zod";
 export const Versions = {
   template: "fullbleed-1.1",
-  prompt: "editorial-1.1",
+  prompt: "editorial-1.2",
   font: "Pretendard-1.3.9",
 };
 export const pageSchema = z.object({
