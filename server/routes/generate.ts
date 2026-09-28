@@ -47,7 +47,11 @@ generateRouter.post(
         String(req.body.extra || "").slice(0, 2000),
       );
     } catch (e) {
-      throw Object.assign(e as Error, { code: "AI" });
+      // AI_QUOTA 처럼 이미 구분된 코드는 유지하고, 나머지만 일반 AI 오류로 묶는다.
+      const err = e as Error & { code?: string };
+      throw Object.assign(err, {
+        code: err.code?.startsWith("AI_") ? err.code : "AI",
+      });
     }
     res.json(
       await mutate(async () => {

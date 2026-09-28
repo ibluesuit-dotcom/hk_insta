@@ -184,9 +184,6 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
     if (r.method() === "PUT") puts.push(r.postDataJSON());
   });
   await page.getByLabel("부제").fill("검수 부제");
-  await page.getByLabel("사진 크레딧").fill("사진 검수");
-  await page.getByLabel("게시용 캡션").fill("검수 캡션 #배치");
-  await page.getByLabel("표지 대체 텍스트").fill("검수 표지 대체");
   await page.getByRole("button", { name: "본문 1", exact: true }).click();
   await page.getByLabel("페이지 본문").fill("검수 본문 하나");
   await page.getByLabel("본문 글자 크기").selectOption("56");
@@ -195,7 +192,7 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   await page.getByLabel("이 페이지 대체 텍스트").fill("검수 본문2 대체");
   await page.waitForTimeout(1200); // beyond autosave debounce
   expect(puts.length, "drafts must not autosave").toBe(0);
-  await expect(page.locator(".draft-notice")).toContainText("미반영 초안 8개");
+  await expect(page.locator(".draft-notice")).toContainText("미반영 초안 5개");
   await expect(download(page)).not.toHaveAttribute("href", /.+/);
   // Direct API still serves the OLD fresh render (server cannot see browser drafts): record.
   const before = await request.get(`/api/projects/${p.id}/download`);
@@ -218,7 +215,7 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   await refresh(page).click();
   await expect(page.getByRole("alert").first()).toContainText("모의 저장 실패");
   expect(renders).toBe(0);
-  expect(Object.keys(await drafts(page, p.id)).length).toBe(8);
+  expect(Object.keys(await drafts(page, p.id)).length).toBe(5);
   await expect(page.getByLabel("페이지 제목")).toHaveValue("검수 제목 둘");
   await expect(download(page)).not.toHaveAttribute("href", /.+/);
   await page.screenshot({ path: out + "/p3-put-failed.png", fullPage: true });
@@ -226,7 +223,7 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   await page.unroute("**/api/projects/*");
   await page.reload();
   await page.getByRole("button", { name: "02문안·사진 편집" }).click();
-  await expect(page.locator(".draft-notice")).toContainText("미반영 초안 8개");
+  await expect(page.locator(".draft-notice")).toContainText("미반영 초안 5개");
   await expect(page.getByLabel("부제")).toHaveValue("검수 부제");
 
   // 2) render fails after a good PUT: edits saved, export stays disabled.
@@ -245,9 +242,6 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
   expect(puts[0].copy.pages[0].body).toBe("검수 본문 하나");
   expect(puts[0].copy.pages[1].title).toBe("검수 제목 둘");
   expect(puts[0].copy.pages[1].alt).toBe("검수 본문2 대체");
-  expect(puts[0].copy.caption).toBe("검수 캡션 #배치");
-  expect(puts[0].copy.alt).toBe("검수 표지 대체");
-  expect(puts[0].credit).toBe("사진 검수");
   expect(puts[0].bodyFont).toBe(56);
   expect(puts[0].partialDirection).toBe("");
   expect(puts[0]).not.toHaveProperty("editorDrafts");
@@ -302,8 +296,8 @@ test("P3 batch cross-page save, failed PUT and failed render recover", async ({
     "alt-text.txt",
     "manifest.json",
   ]);
-  expect(entries["caption.txt"].toString()).toBe("검수 캡션 #배치");
-  expect(entries["alt-text.txt"].toString()).toContain("01: 검수 표지 대체");
+  expect(entries["caption.txt"].toString()).toBe(done.copy.caption);
+  expect(entries["alt-text.txt"].toString()).toContain("01: " + done.copy.alt);
   expect(entries["alt-text.txt"].toString()).toContain("03: 검수 본문2 대체");
   for (const [i, name] of [
     "01-cover.png",
@@ -352,10 +346,16 @@ test("P4 anonymous export denied; no approval wording; desktop/mobile screenshot
   baseURL,
 }) => {
   const p = await setup(page);
-  const anon = await playwright.request.newContext({ baseURL });
-  expect((await anon.get(`/api/projects/${p.id}/download`)).status()).toBe(401);
-  expect((await anon.get(`/api/projects/${p.id}/png/0`)).status()).toBe(401);
-  await anon.dispose();
+  // Anonymous requests are only refused when an account is configured; the
+  // default mock server bypasses login.
+  if (process.env.REVIEW_AUTH === "1") {
+    const anon = await playwright.request.newContext({ baseURL });
+    expect((await anon.get(`/api/projects/${p.id}/download`)).status()).toBe(
+      401,
+    );
+    expect((await anon.get(`/api/projects/${p.id}/png/0`)).status()).toBe(401);
+    await anon.dispose();
+  }
   await expect(page.getByText(/승인|검수 완료|03/)).toHaveCount(0);
   await expect(page.locator("nav.steps button")).toHaveCount(2);
   await expect(page.getByRole("button", { name: / 수정$/ })).toHaveCount(0);

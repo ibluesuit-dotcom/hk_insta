@@ -6,6 +6,24 @@ import { z } from "zod";
 import { read, save, mutate, root } from "../store";
 import { render } from "../render";
 import { wrap } from "../http";
+import { isAiBackground } from "../../shared/ai-background";
+import type { Project } from "../../shared/model";
+
+// AI provenance is recorded only while the AI asset is the shown cover photo.
+export function manifestBackground(p: Project) {
+  if (!isAiBackground(p)) return {};
+  const b = p.background!;
+  return {
+    background: {
+      variant: b.variant,
+      model: b.model,
+      promptVersion: b.promptVersion,
+      assetId: b.assetId,
+      sourceHash: b.sourceHash,
+      at: b.at,
+    },
+  };
+}
 
 // Rendering, review approval, and export (ZIP, single PNG, text files).
 export const outputRouter = express.Router();
@@ -126,6 +144,7 @@ outputRouter.get(
           versions: p.versions,
           revision: p.revision,
           order: p.renders.map((_, i) => i + 1),
+          ...manifestBackground(p),
         },
         null,
         2,

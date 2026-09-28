@@ -2,6 +2,7 @@ import { resizePages } from "../../shared/model";
 import { api } from "../api";
 import { keepPageDraftsBelow } from "../format";
 import { Studio } from "../hooks/use-studio";
+import { AiBackgroundPicker } from "./ai-background";
 import { CoverPhotoUpload, Evidence } from "./fields";
 
 /** 01 원문과 제작 방향: source input, keyword suggestions, cover photo. */
@@ -129,6 +130,7 @@ export function SourceTab({ s }: { s: Studio }) {
       >
         <h3>메인 카드 배경 이미지</h3>
         <CoverPhotoUpload s={s} />
+        <AiBackgroundPicker s={s} />
 
         {p.photo && (
           <button

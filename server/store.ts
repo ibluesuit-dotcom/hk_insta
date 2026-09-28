@@ -4,7 +4,7 @@ import { Project, migrateCover } from "../shared/model";
 export const root = path.resolve(process.env.DATA_DIR || "data");
 export async function initStore() {
   await Promise.all(
-    ["projects", "uploads", "renders"].map((x) =>
+    ["projects", "uploads", "renders", "ai-backgrounds"].map((x) =>
       fs.mkdir(path.join(root, x), { recursive: true }),
     ),
   );

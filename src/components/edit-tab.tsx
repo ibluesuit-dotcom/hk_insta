@@ -1,5 +1,6 @@
 import { headlineLayout, headlineEditorText } from "../../shared/model";
 import { Studio } from "../hooks/use-studio";
+import { AiBackgroundPicker } from "./ai-background";
 import { CoverPhotoUpload, Evidence, LockButton, RegenButton } from "./fields";
 
 /** 02 문안·사진 편집: page tabs, cover fields + crop, body page fields. */
@@ -168,6 +169,7 @@ function CoverFields({ s }: { s: Studio }) {
         메인 카드 배경 이미지 <span>첫 번째 카드 · 표지</span>
       </label>
       <CoverPhotoUpload s={s} />
+      <AiBackgroundPicker s={s} />
 
       {p.photo && <PhotoCrop s={s} />}
     </>

@@ -9,6 +9,10 @@ import { sourcesRouter } from "./routes/sources";
 import { photosRouter } from "./routes/photos";
 import { generateRouter } from "./routes/generate";
 import { outputRouter } from "./routes/output";
+import {
+  aiBackgroundRouter,
+  aiBackgroundGenerate,
+} from "./routes/ai-background";
 
 // 기본은 로컬 전용. 리버스 프록시 뒤에서 서비스할 때는 ALLOWED_HOSTS(쉼표 구분)로 호스트를 추가한다.
 function hostGuard(): express.RequestHandler {
@@ -61,6 +65,7 @@ export async function createApp() {
       model: "gpt-6-astra",
       configured: process.env.MOCK_AI === "1" ? false : hasKey(),
       mock: process.env.MOCK_AI === "1",
+      aiBackground: { generate: aiBackgroundGenerate() },
     }),
   );
   app.use(projectsRouter);
@@ -68,6 +73,7 @@ export async function createApp() {
   app.use(photosRouter);
   app.use(generateRouter);
   app.use(outputRouter);
+  app.use(aiBackgroundRouter);
   if (process.env.NODE_ENV === "production") {
     app.use(express.static("dist"));
     app.get("/{*path}", (_req, res) =>

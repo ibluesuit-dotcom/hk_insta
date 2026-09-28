@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  backgroundSchema,
+  photoPathAllowed,
+  type Background,
+} from "./ai-background";
 export const Versions = {
   template: "fullbleed-1.1",
   prompt: "editorial-1.2",
@@ -56,6 +61,8 @@ export interface Project {
   copy: Copy;
   locks: Record<string, boolean>;
   photo: string;
+  // Provenance of an AI-generated cover photo; the server alone writes it.
+  background?: Background;
   credit: string;
   focal: { x: number; y: number; zoom: number };
   bodyFont: number;
@@ -217,7 +224,11 @@ export const draftCopySchema = copySchema
     alt: draftText,
   })
   .strict();
-const uploadPath = z.string().regex(/^(|\/uploads\/[\w-]+\.jpg)$/);
+// AI-family aliases are refused so they cannot skip the sidecar and owner checks.
+const uploadPath = z
+  .string()
+  .regex(/^(|\/uploads\/[\w-]+\.jpg)$/)
+  .refine(photoPathAllowed);
 export const projectSchema = z
   .object({
     id: z.string().regex(/^[\w-]+$/),
@@ -253,6 +264,7 @@ export const projectSchema = z
       z.boolean(),
     ),
     photo: uploadPath,
+    background: backgroundSchema.optional(),
     credit: draftText,
     focal: z
       .object({

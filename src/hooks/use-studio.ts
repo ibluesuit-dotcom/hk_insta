@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { sourceHeadline } from "../../shared/source-title";
+import { AiVariant, sourceHash } from "../../shared/ai-background";
 import {
   Project,
   movePage,
@@ -17,6 +18,43 @@ import { copyText } from "../browser";
 import { draftsStorageKey, keepPageDraftsBelow } from "../format";
 
 export type Studio = ReturnType<typeof useStudio>;
+
+/** A generated cover background candidate as returned by the server. */
+export type AiCandidate = {
+  assetId: string;
+  url: string;
+  variant: AiVariant;
+  status: "ready" | "needs_review";
+  reviewReason: string | null;
+  subject: string;
+  label: string;
+  sourceHash: string;
+  model: string;
+  at: string;
+};
+export type AiSlot = {
+  status: "idle" | "generating" | "done" | "failed";
+  requestId: number;
+  candidate?: AiCandidate;
+  error?: string;
+  blocked?: boolean;
+};
+export type AiState = {
+  projectId: string;
+  briefId?: string;
+  briefHash?: string;
+  notice: string;
+  slots: Record<AiVariant, AiSlot>;
+};
+export const AI_VARIANTS: AiVariant[] = ["photo", "art"];
+const emptyAi = (projectId: string): AiState => ({
+  projectId,
+  notice: "",
+  slots: {
+    photo: { status: "idle", requestId: 0 },
+    art: { status: "idle", requestId: 0 },
+  },
+});
 
 /**
  * Project editing state: the committed server project, browser-local drafts,
@@ -51,6 +89,12 @@ export function useStudio() {
   const saving = useRef<Promise<Project> | null>(null);
   const saveBlocked = useRef(false);
   const autosavePaused = useRef(false);
+  // AI background candidates live here so they survive tab switches. Late
+  // responses are dropped unless project, lookup generation and request match.
+  const [ai, setAiState] = useState<AiState | null>(null);
+  const aiRef = useRef<AiState | null>(null);
+  const aiGeneration = useRef(0);
+  const aiRequest = useRef(0);
   async function enterStudio() {
     await run("스튜디오 여는 중", async () => {
       const [health, projects] = await Promise.all([
@@ -84,6 +128,9 @@ export function useStudio() {
       draftsRef.current = stored;
       setDrafts(stored);
       saveBlocked.current = false;
+      aiGeneration.current++;
+      aiRef.current = emptyAi(next.id);
+      setAiState(aiRef.current);
     }
     ref.current = next;
     setIndex((index) => Math.min(index, next.count));
@@ -129,6 +176,204 @@ export function useStudio() {
     if (busyRef.current || !ref.current) return;
     const visible = applyDrafts(ref.current, draftsRef.current);
     persistDrafts({ ...draftsRef.current, [key]: draftItem(fn(visible), key) });
+  }
+  useEffect(() => {
+    if (committed?.id) loadAiRecent(committed.id);
+  }, [committed?.id]);
+  function setAi(
+    projectId: string,
+    generation: number,
+    fn: (state: AiState) => AiState,
+  ) {
+    const state = aiRef.current;
+    if (
+      !state ||
+      state.projectId !== projectId ||
+      generation !== aiGeneration.current ||
+      ref.current?.id !== projectId
+    )
+      return false;
+    aiRef.current = fn(state);
+    setAiState(aiRef.current);
+    return true;
+  }
+  function setSlot(
+    projectId: string,
+    generation: number,
+    variant: AiVariant,
+    requestId: number | null,
+    slot: Partial<AiSlot>,
+  ) {
+    setAi(projectId, generation, (state) => {
+      const current = state.slots[variant];
+      if (requestId !== null && current.requestId !== requestId) return state;
+      return {
+        ...state,
+        slots: { ...state.slots, [variant]: { ...current, ...slot } },
+      };
+    });
+  }
+  /** Restore completed candidates after reload or re-entering a project. */
+  async function loadAiRecent(projectId: string) {
+    const generation = aiGeneration.current;
+    let recent: Partial<Record<AiVariant, AiCandidate>>;
+    try {
+      recent = await api(`/projects/${projectId}/ai-background/recent`);
+    } catch {
+      return;
+    }
+    setAi(projectId, generation, (state) => {
+      const slots = { ...state.slots };
+      for (const variant of AI_VARIANTS) {
+        const candidate = recent[variant];
+        // A running or already filled slot is never replaced by recent.
+        if (candidate && slots[variant].status === "idle")
+          slots[variant] = { ...slots[variant], status: "done", candidate };
+      }
+      return { ...state, slots };
+    });
+  }
+  /** Brief once from the saved article, then one image per variant in parallel. */
+  async function generateAi(variants: AiVariant[] = AI_VARIANTS) {
+    const project = ref.current;
+    const state = aiRef.current;
+    if (busyRef.current || !project || !state) return;
+    if (variants.some((v) => state.slots[v].status === "generating")) return;
+    const projectId = project.id;
+    const generation = aiGeneration.current;
+    const requests = Object.fromEntries(
+      variants.map((v) => [v, ++aiRequest.current]),
+    ) as Record<AiVariant, number>;
+    setAi(projectId, generation, (state) => ({ ...state, notice: "" }));
+    for (const v of variants)
+      setSlot(projectId, generation, v, null, {
+        status: "generating",
+        requestId: requests[v],
+        error: undefined,
+        blocked: false,
+      });
+    let briefId: string;
+    try {
+      const current = await flush();
+      const hash = sourceHash(current);
+      const known = aiRef.current;
+      if (
+        known?.projectId === projectId &&
+        known.briefId &&
+        known.briefHash === hash
+      )
+        briefId = known.briefId;
+      else {
+        const brief = await api(
+          `/projects/${projectId}/ai-background/brief`,
+          "POST",
+          { expectedSourceHash: hash },
+        );
+        briefId = brief.briefId;
+        setAi(projectId, generation, (state) => ({
+          ...state,
+          briefId: brief.briefId,
+          briefHash: brief.sourceHash,
+        }));
+      }
+    } catch (e) {
+      for (const v of variants)
+        setSlot(projectId, generation, v, requests[v], {
+          status: "failed",
+          error: (e as Error).message,
+        });
+      return;
+    }
+    await Promise.all(
+      variants.map(async (variant) => {
+        try {
+          const candidate: AiCandidate = await api(
+            `/projects/${projectId}/ai-background`,
+            "POST",
+            { briefId, variant },
+          );
+          setSlot(projectId, generation, variant, requests[variant], {
+            status: "done",
+            candidate,
+          });
+        } catch (e) {
+          if ((e as any).code === "AI_BRIEF_MISSING")
+            setAi(projectId, generation, (state) => ({
+              ...state,
+              briefId: undefined,
+              briefHash: undefined,
+            }));
+          setSlot(projectId, generation, variant, requests[variant], {
+            status: "failed",
+            error: (e as Error).message,
+            blocked: (e as any).code === "AI_BLOCKED",
+          });
+        }
+      }),
+    );
+  }
+  /**
+   * Dedicated apply: save every draft, drop photo drafts, apply the asset on
+   * the server and re-render only the cover, all inside one run().
+   */
+  async function applyAi(assetId: string) {
+    const project = ref.current;
+    if (!project) return false;
+    const projectId = project.id;
+    let notice = "";
+    const ok = await run("AI 배경 적용 중", async () => {
+      let current: Project;
+      try {
+        current = await saveDrafts();
+      } catch (e) {
+        if (
+          !["AI_FOREIGN", "AI_ASSET"].includes((e as any).code) ||
+          !draftsRef.current.photo
+        )
+          throw e;
+        // An AI photo draft this project may not use: drop it and go on.
+        const { photo: _, ...rest } = draftsRef.current;
+        persistDrafts(rest);
+        autosavePaused.current = false;
+        notice = "사용할 수 없는 AI 사진 초안을 비웠습니다. ";
+        current = await saveDrafts();
+      }
+      if (draftsRef.current.photo) {
+        const { photo: _, ...rest } = draftsRef.current;
+        persistDrafts(rest);
+      }
+      const applied: Project = await api(
+        `/projects/${current.id}/ai-background/apply`,
+        "POST",
+        { revision: current.revision, assetId },
+      );
+      accept(applied);
+      setIndex(0);
+      if (!applied.copy.headline.trim()) {
+        notice += "배경 적용됨. 제목이 정해지면 미리보기 갱신에서 렌더됩니다.";
+        return;
+      }
+      try {
+        setBusy("표지를 다시 렌더하고 있습니다");
+        accept(
+          await api(`/projects/${applied.id}/render`, "POST", {
+            revision: applied.revision,
+            only: 0,
+          }),
+        );
+        notice +=
+          "배경 적용됨. 표지만 다시 렌더했습니다. 내보내기 전에 전체 미리보기 갱신이 필요합니다.";
+      } catch (e) {
+        throw new Error(
+          "배경은 적용됨, 표지 렌더 실패: " +
+            (e as Error).message +
+            " 미리보기 갱신으로 다시 렌더하세요.",
+        );
+      }
+    });
+    if (notice)
+      setAi(projectId, aiGeneration.current, (state) => ({ ...state, notice }));
+    return ok;
   }
   async function saveDrafts(): Promise<Project> {
     if (saving.current) await saving.current;
@@ -499,5 +744,8 @@ export function useStudio() {
     pageField,
     photo,
     files,
+    ai,
+    generateAi,
+    applyAi,
   };
 }

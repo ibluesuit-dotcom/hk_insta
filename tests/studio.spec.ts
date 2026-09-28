@@ -25,7 +25,7 @@ test("source → photo → PNG ZIP → archive duplicate restore", async ({
       "design_handoff_news_card_fullbleed/PYH2026090110410005100.jpg",
     );
   await expect(page.locator(".photo-drop img")).toBeVisible();
-  await page.getByRole("button", { name: "생성" }).click();
+  await page.getByRole("button", { name: "생성", exact: true }).click();
   await expect(page.locator(".feed-image img")).toBeVisible({ timeout: 30000 });
   await page.getByRole("button", { name: "02문안·사진 편집" }).click();
   await expect(page.getByLabel("표지 제목", { exact: true })).toHaveValue(
@@ -39,9 +39,6 @@ test("source → photo → PNG ZIP → archive duplicate restore", async ({
       ),
     );
   await expect(page.locator(".photo-drop img")).toBeVisible();
-  await page
-    .getByLabel("사진 크레딧", { exact: true })
-    .fill("사진 연합뉴스 · 형식 예시");
   await page.getByLabel("headline 잠금").click();
   const refreshed = page.waitForResponse((r) => r.url().endsWith("/render"));
   await page
@@ -57,14 +54,14 @@ test("source → photo → PNG ZIP → archive duplicate restore", async ({
       "/e2e/01-editor.png",
     fullPage: true,
   });
-  await page.getByText("목업 계정 설정", { exact: true }).click();
-  const displaySave = page.waitForResponse(
-    (r) => r.request().method() === "PUT",
-  );
-  await page
-    .getByLabel("표시용 계정명", { exact: true })
-    .fill("profile_only_check");
-  const display = await (await displaySave).json();
+  // The mock account controls were removed from the editor; the freshly
+  // rendered project must stay exportable without approval.
+  const display = await (
+    await request.get(
+      "/api/projects/" +
+        (await page.evaluate(() => sessionStorage.getItem("studio-project"))),
+    )
+  ).json();
   expect(display.imageApproved).toBe(false);
   expect(display.copyApproved).toBe(false);
   expect(display.renderRevision).toBe(display.revision);
@@ -323,7 +320,7 @@ test("long actions disable edits and preserve saved generation without an autosa
       "design_handoff_news_card_fullbleed/PYH2026090110410005100.jpg",
     );
   await expect(page.locator(".photo-drop img")).toBeVisible();
-  await page.getByRole("button", { name: "생성" }).click();
+  await page.getByRole("button", { name: "생성", exact: true }).click();
   const generating = await started;
   await expect(page.getByLabel("통합 원문")).toBeDisabled();
   await expect(page.getByLabel("본문 페이지 수")).toBeDisabled();

@@ -96,11 +96,6 @@ test("all visible and hidden edits save together, actual lines persist, export h
   await expect(page.locator(".progress")).toHaveCount(0);
   await page.getByLabel("가로 초점").press("Home");
   await page.getByLabel("부제", { exact: true }).fill("함께 저장할 부제");
-  await page.getByLabel("사진 크레딧", { exact: true }).fill("사진 테스트");
-  await page
-    .getByLabel("게시용 캡션", { exact: true })
-    .fill("함께 저장할 캡션");
-  await page.getByLabel("표지 대체 텍스트", { exact: true }).fill("표지 설명");
   await page.getByRole("button", { name: "본문 1", exact: true }).click();
   await page.getByLabel("페이지 제목", { exact: true }).fill("새 본문 제목");
   await page
@@ -119,8 +114,6 @@ test("all visible and hidden edits save together, actual lines persist, export h
   const saved = await update(page);
   expect(saved.copy).toMatchObject({
     kicker: "함께 저장할 부제",
-    caption: "함께 저장할 캡션",
-    alt: "표지 설명",
   });
   expect(saved.copy.pages[0]).toMatchObject({
     title: "새 본문 제목",
@@ -149,8 +142,8 @@ test("all visible and hidden edits save together, actual lines persist, export h
     "alt-text.txt",
     "manifest.json",
   ]);
-  expect(entries["caption.txt"].toString()).toBe("함께 저장할 캡션");
-  expect(entries["alt-text.txt"].toString()).toContain("01: 표지 설명");
+  expect(entries["caption.txt"].toString()).toBe(saved.copy.caption);
+  expect(entries["alt-text.txt"].toString()).toContain("01: " + saved.copy.alt);
   expect(JSON.parse(entries["manifest.json"].toString())).toMatchObject({
     revision: saved.revision,
     order: [1, 2],

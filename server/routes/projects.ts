@@ -2,6 +2,8 @@ import express from "express";
 import { blank, profileOnlyChange } from "../../shared/model";
 import { list, read, save, mutate } from "../store";
 import { wrap, validateProject } from "../http";
+import { aiAssetIdOf, backgroundFromSidecar } from "../../shared/ai-background";
+import { assetUsableBy, foreignAsset, loadSidecar } from "../ai-background";
 
 // Project CRUD and version history.
 export const projectsRouter = express.Router();
@@ -40,11 +42,21 @@ projectsRouter.put(
   wrap(async (req, res) =>
     res.json(
       await mutate(async () => {
-        const old = (await read(req.params.id)).current;
-        const input = validateProject(req.body);
+        const data = await read(req.params.id);
+        const old = data.current;
+        // AI provenance is decided here, never taken from the client.
+        const input = validateProject({ ...req.body, background: undefined });
+        let background = old.background;
+        const aiAssetId = aiAssetIdOf(input.photo);
+        if (aiAssetId && input.photo !== old.photo) {
+          const sidecar = await loadSidecar(aiAssetId);
+          if (!assetUsableBy(sidecar, data)) throw foreignAsset();
+          background = backgroundFromSidecar(sidecar);
+        }
         const displayOnly = profileOnlyChange(old, input);
         const p = {
           ...input,
+          background,
           id: old.id,
           versions: old.versions,
           renders: old.renders,
@@ -62,6 +74,7 @@ projectsRouter.put(
           imageApproved: displayOnly && old.imageApproved,
           generation: old.generation,
         };
+        if (!p.background) delete p.background;
         delete p.history;
         return save(p, req.body.revision);
       }),

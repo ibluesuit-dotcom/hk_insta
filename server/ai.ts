@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { root } from "./store";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+import { isQuotaExhausted } from "./openai-errors";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import {
@@ -120,6 +121,13 @@ async function generateUncached(p: Project, scope: string, extra: string) {
       throw new Error("요청한 본문 장수와 응답이 다릅니다.");
     return { copy, usage: response.usage, model: "gpt-6-astra" };
   } catch (e) {
+    if (e instanceof OpenAI.APIError && isQuotaExhausted(e))
+      throw Object.assign(
+        new Error(
+          "OpenAI API 크레딧이 소진되었습니다. 관리자가 결제 설정에서 크레딧을 충전해야 합니다.",
+        ),
+        { code: "AI_QUOTA", status: 402 },
+      );
     if (e instanceof OpenAI.APIError)
       throw new Error(
         `AI 요청 실패 (${e.status || "network"}). 연결·사용량·모델 접근 권한을 확인하고 다시 시도하세요.`,

@@ -1,4 +1,7 @@
 import { defineConfig } from "@playwright/test";
+// Specs write evidence to E2E_ARTIFACT_DIR; unset, `${undefined}/x` used to
+// create an `undefined/` folder in the repo root. Default to an ignored path.
+process.env.E2E_ARTIFACT_DIR ||= "test-results/e2e-artifacts";
 export default defineConfig({
   testDir: "tests",
   testMatch: "*.spec.ts",
@@ -9,7 +12,8 @@ export default defineConfig({
   },
   workers: 1,
   webServer: {
-    command: "MOCK_AI=1 MOCK_DELAY=800 DATA_DIR=data/e2e PORT=4311 npm run dev",
+    command:
+      "MOCK_AI=1 MOCK_DELAY=800 AI_BACKGROUND_GENERATE=1 DATA_DIR=data/e2e PORT=4311 npm run dev",
     url: "http://127.0.0.1:4311/api/health",
     reuseExistingServer: true,
   },

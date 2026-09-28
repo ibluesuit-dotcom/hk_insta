@@ -1358,3 +1358,178 @@ header h1 {
 .headline-suggestions button {
   text-align: left;
 }
+
+/* AI 배경 후보: two 4:5 cards that stack on phone widths. */
+.ai-background {
+  margin: 14px 0;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #d9dfdf;
+  border-radius: 8px;
+  min-width: 0;
+}
+.ai-background-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ai-background-head h4 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+.ai-background-head small {
+  color: #526675;
+}
+.ai-background button,
+.ai-background a {
+  white-space: normal;
+}
+.ai-background .hint,
+.ai-notice,
+.ai-applied {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+.ai-notice {
+  padding: 8px 10px;
+  background: #eef6f0;
+  border-radius: 6px;
+}
+.ai-applied .warn {
+  display: block;
+}
+.ai-candidates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.ai-candidate {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-candidate-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ai-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #edf0ef;
+  color: #526675;
+}
+.ai-badge.busy {
+  background: #e3edf5;
+  color: #184f74;
+}
+.ai-badge.good {
+  background: #e3f1e7;
+  color: #2f6b41;
+}
+.ai-badge.warn {
+  background: #fff4cf;
+  color: #87630b;
+}
+.ai-badge.bad {
+  background: #fde7ec;
+  color: #bd123b;
+}
+.ai-frame {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #112b3a;
+  container-type: inline-size;
+}
+.ai-frame > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ai-scrim {
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(transparent, #000c 70%);
+}
+.ai-title {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 13%;
+  color: #fff;
+  font-weight: 800;
+  font-size: 7cqw;
+  line-height: 1.25;
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.ai-credit {
+  position: absolute;
+  left: 8%;
+  bottom: 4%;
+  color: #fffc;
+  font-size: 4cqw;
+}
+.ai-placeholder,
+.ai-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+  color: #dfe8ee;
+  font-size: 12px;
+}
+.ai-overlay {
+  background: #112b3acc;
+}
+.ai-candidate.generating .ai-placeholder {
+  animation: ai-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ai-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+.ai-candidate p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.ai-subject {
+  color: #526675;
+}
+.ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ai-actions button {
+  padding: 8px 10px;
+  flex: 1 1 auto;
+}
+.ai-actions a {
+  font-size: 12px;
+  padding: 4px 2px;
+}
+@media (max-width: 520px) {
+  .ai-candidates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-background-head > button {
+    width: 100%;
+  }
+}
