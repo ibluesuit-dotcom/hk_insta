@@ -15,7 +15,7 @@ import {
 } from "../../shared/editor-drafts";
 import { api } from "../api";
 import { copyText } from "../browser";
-import { draftsStorageKey, keepPageDraftsBelow } from "../format";
+import { captionKey, draftsStorageKey, keepPageDraftsBelow } from "../format";
 
 export type Studio = ReturnType<typeof useStudio>;
 
@@ -56,6 +56,38 @@ const emptyAi = (projectId: string): AiState => ({
   },
 });
 
+// An unsaved caption plus the server caption it was written over (`base`).
+type PendingCaption = { caption: string; base?: string };
+function pendingCaption(projectId: string): PendingCaption | undefined {
+  try {
+    const raw = localStorage.getItem(captionKey(projectId));
+    if (raw === null) return undefined;
+    const value = JSON.parse(raw);
+    if (typeof value?.caption === "string") return value;
+  } catch {}
+  return undefined;
+}
+function clearPendingCaption(projectId: string) {
+  try {
+    localStorage.removeItem(captionKey(projectId));
+  } catch {}
+}
+// A pending caption that could not be applied safely is parked here until the
+// user explicitly applies or discards it; later typing never touches it.
+const recoveryKey = (projectId: string) => "caption-recovery:" + projectId;
+function recoveredCaption(projectId: string) {
+  try {
+    return localStorage.getItem(recoveryKey(projectId));
+  } catch {
+    return null;
+  }
+}
+function setRecoveredCaption(projectId: string, caption: string | null) {
+  try {
+    if (caption === null) localStorage.removeItem(recoveryKey(projectId));
+    else localStorage.setItem(recoveryKey(projectId), caption);
+  } catch {}
+}
 /**
  * Project editing state: the committed server project, browser-local drafts,
  * the busy lock, and save/flush/generate/render actions with their revision
@@ -71,6 +103,9 @@ export function useStudio() {
   const [tab, setTab] = useState("source");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  // Unsaved caption from an earlier session that could not be applied safely.
+  const [captionConflict, setCaptionConflict] = useState<string | null>(null);
+  const serverCaption = useRef("");
   const [saved, setSaved] = useState("서버에 자동 저장");
   const [dirty, setDirty] = useState(false);
   const [index, setIndex] = useState(0);
@@ -116,6 +151,8 @@ export function useStudio() {
     });
   }
   function accept(next: Project) {
+    let recoverCaption: string | undefined;
+    serverCaption.current = next.copy.caption;
     sessionStorage.setItem("studio-project", next.id);
     if (ref.current?.id !== next.id) {
       let stored: Drafts = {};
@@ -125,6 +162,35 @@ export function useStudio() {
         );
       } catch {}
       stored = keepPageDraftsBelow(stored, next.count);
+      // An unsaved caption (or a leftover draft from when captions were
+      // staged locally) goes back on the save path only if the server caption
+      // is still the one it was written over and is unlocked. Otherwise it is
+      // kept and offered to the user, never silently applied or dropped.
+      const legacy = stored.caption?.["copy.caption"];
+      const unsaved: PendingCaption | undefined =
+        pendingCaption(next.id) ??
+        (typeof legacy === "string"
+          ? { caption: legacy, base: next.copy.caption }
+          : undefined);
+      if (unsaved && unsaved.caption !== next.copy.caption) {
+        if (!next.locks.caption && unsaved.base === next.copy.caption)
+          recoverCaption = unsaved.caption;
+        else setRecoveredCaption(next.id, unsaved.caption);
+      }
+      clearPendingCaption(next.id);
+      const parked = recoveredCaption(next.id);
+      if (parked === next.copy.caption) setRecoveredCaption(next.id, null);
+      setCaptionConflict(parked === next.copy.caption ? null : parked);
+      if (typeof legacy === "string") {
+        const { caption: _old, ...rest } = stored;
+        stored = rest;
+        try {
+          localStorage.setItem(
+            draftsStorageKey(next.id),
+            JSON.stringify(stored),
+          );
+        } catch {}
+      }
       draftsRef.current = stored;
       setDrafts(stored);
       saveBlocked.current = false;
@@ -139,6 +205,9 @@ export function useStudio() {
     dirtyRef.current = false;
     autosavePaused.current = false;
     setSaved("서버 저장 완료");
+    if (pendingCaption(next.id)?.caption === next.copy.caption)
+      clearPendingCaption(next.id);
+    if (recoverCaption !== undefined) setCaption(recoverCaption, true);
   }
   function edit(fn: (p: Project) => Project, internal = false) {
     if (busyRef.current && !internal) return;
@@ -437,6 +506,17 @@ export function useStudio() {
       const result = await promise;
       if (seq === editSequence.current) accept(result);
       else {
+        // The server now holds this save's caption; newer typing is pending
+        // on top of it, so rebase the pending copy to avoid a false conflict.
+        serverCaption.current = result.copy.caption;
+        const pending = pendingCaption(result.id);
+        if (pending)
+          try {
+            localStorage.setItem(
+              captionKey(result.id),
+              JSON.stringify({ ...pending, base: result.copy.caption }),
+            );
+          } catch {}
         ref.current = { ...ref.current!, revision: result.revision };
         setP(ref.current);
         setSaved("저장 대기…");
@@ -543,6 +623,10 @@ export function useStudio() {
             ...payload,
           },
         );
+        if (partial && payload.scope === "caption") {
+          setCaption(result.copy.caption, true);
+          return;
+        }
         if (partial) {
           const keys = payload.scope.startsWith("page:")
             ? ["role", "title", "body", "highlight", "alt"].map(
@@ -604,7 +688,36 @@ export function useStudio() {
     if (key) stage(key, (p) => ({ ...p, [k]: v }));
     else edit((p) => ({ ...p, [k]: v }));
   }
+  // The post caption is not on any card: it autosaves directly instead of
+  // waiting for a render, and a caption edit keeps the rendered images fresh.
+  // Until the server has the caption, a copy in localStorage survives a
+  // failed save and a reload; accept() clears it once the server matches.
+  function setCaption(caption: string, internal = false) {
+    if (busyRef.current && !internal) return;
+    if (ref.current?.copy.caption === caption) return;
+    const id = ref.current!.id;
+    try {
+      localStorage.setItem(
+        captionKey(id),
+        JSON.stringify({
+          caption,
+          base: serverCaption.current,
+        }),
+      );
+    } catch {}
+    edit((p) => ({ ...p, copy: { ...p.copy, caption } }), internal);
+  }
+  function applyCaptionConflict() {
+    if (captionConflict === null || !ref.current) return;
+    setCaption(captionConflict);
+    discardCaptionConflict();
+  }
+  function discardCaptionConflict() {
+    if (ref.current) setRecoveredCaption(ref.current.id, null);
+    setCaptionConflict(null);
+  }
   function copy(k: string, v: any) {
+    if (k === "caption") return setCaption(v);
     stage(k, (p) => ({
       ...p,
       ...(k === "headline" ? { headlineBreaks: "" } : {}),
@@ -692,6 +805,9 @@ export function useStudio() {
     });
   }
   return {
+    captionConflict,
+    applyCaptionConflict,
+    discardCaptionConflict,
     committed,
     p,
     drafts,

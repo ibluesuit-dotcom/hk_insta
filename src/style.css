@@ -303,6 +303,13 @@ header h1 {
   color: #b57b1c !important;
   font-size: 12px;
 }
+.caption-conflict blockquote {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 3px solid currentColor;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .steps {
   display: flex;
   margin-bottom: 22px;

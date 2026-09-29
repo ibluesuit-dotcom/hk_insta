@@ -348,8 +348,16 @@ export const projectSchema = z
         message: "본문 장수와 페이지 또는 잠금을 확인하세요.",
       });
   });
-// Only display settings may retain card approval; server independently checks this.
-export function profileOnlyChange(a: Project, b: Project) {
+// The post caption is not drawn on any card, so it is left out of the card comparison.
+function withoutCaption(p: Project) {
+  const { caption: _lock, ...locks } = p.locks;
+  return { ...p, copy: { ...p.copy, caption: "" }, locks };
+}
+// Only display settings and the post caption may retain card approval and
+// render freshness; the server independently checks this.
+export function profileOnlyChange(x: Project, y: Project) {
+  const a = withoutCaption(x);
+  const b = withoutCaption(y);
   const fields = [
     "name",
     "source",
@@ -373,7 +381,17 @@ export function profileOnlyChange(a: Project, b: Project) {
     "kickerHidden",
     "highlightFrom",
   ] as const;
-  return fields.every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
+  return fields.every((k) => canonical(a[k]) === canonical(b[k]));
+}
+// Key order differs between stored JSON and schema-parsed input; compare content only.
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([x], [y]) => (x < y ? -1 : 1)),
+        )
+      : v,
+  );
 }
 export function resizePages(p: Project, count: number) {
   p.copy.pages = Array.from(
