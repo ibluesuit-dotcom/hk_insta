@@ -8,6 +8,12 @@ import { render } from "../render";
 import { wrap } from "../http";
 import { isAiBackground } from "../../shared/ai-background";
 import { cardAlt, cardKind, type Project } from "../../shared/model";
+import {
+  exportCaption,
+  reviewState,
+  selectedFormat,
+  textHash,
+} from "../../shared/post-text";
 
 // AI provenance is recorded only while the AI asset is the shown cover photo.
 export function manifestBackground(p: Project) {
@@ -139,10 +145,14 @@ outputRouter.get(
         },
       );
     }
-    zip.append(p.copy.caption, { name: "caption.txt" });
-    zip.append(altText(p, (i) => String(i + 1).padStart(2, "0")), {
-      name: "alt-text.txt",
-    });
+    const caption = exportCaption(p);
+    zip.append(caption, { name: "caption.txt" });
+    zip.append(
+      altText(p, (i) => String(i + 1).padStart(2, "0")),
+      {
+        name: "alt-text.txt",
+      },
+    );
     zip.append(
       JSON.stringify(
         {
@@ -153,6 +163,11 @@ outputRouter.get(
             order: i + 1,
             kind: cardKind(p, i),
           })),
+          post: {
+            format: selectedFormat(p),
+            textHash: textHash(caption),
+            review: reviewState(p, selectedFormat(p)),
+          },
           ...manifestBackground(p),
         },
         null,
@@ -188,9 +203,7 @@ outputRouter.get(
     const p = (await read(req.params.id)).current;
     const kind = z.enum(["caption", "alt"]).parse(req.params.kind);
     const text =
-      kind === "caption"
-        ? p.copy.caption
-        : altText(p, (i) => String(i + 1));
+      kind === "caption" ? exportCaption(p) : altText(p, (i) => String(i + 1));
     res
       .attachment(kind + ".txt")
       .type("text/plain; charset=utf-8")

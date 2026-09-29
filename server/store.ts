@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { Project, migrateCover } from "../shared/model";
 export const root = path.resolve(process.env.DATA_DIR || "data");
 export async function initStore() {
@@ -44,8 +45,15 @@ export async function save(p: Project, expected: number, label = "자동 저장"
       ),
       { code: "CONFLICT", status: 409 },
     );
+  // Every following card gets a stable ID the first time it is saved.
   p = {
     ...p,
+    copy: {
+      ...p.copy,
+      pages: p.copy.pages.map((page) =>
+        page.id ? page : { ...page, id: randomUUID().slice(0, 8) },
+      ),
+    },
     revision: (old?.current.revision || 0) + 1,
     updatedAt: new Date().toISOString(),
   };

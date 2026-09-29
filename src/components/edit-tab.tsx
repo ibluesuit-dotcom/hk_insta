@@ -448,38 +448,6 @@ function CoverFields({ s }: { s: Studio }) {
         보조제목 끄기
       </label>
       <Evidence s={s} quotes={p.copy.kickerEvidence} />
-      <label>
-        게시글 캡션 <span>{[...p.copy.caption].length}자</span>
-        <div>
-          <LockButton s={s} lockKey="caption" />
-          <RegenButton s={s} scope="caption" />
-        </div>
-      </label>
-      <textarea
-        aria-label="게시글 캡션"
-        value={p.copy.caption}
-        disabled={p.locks.caption}
-        onChange={(e) => copy("caption", e.target.value)}
-      />
-      {s.captionConflict !== null && (
-        <div className="warn caption-conflict" role="alert">
-          <p>
-            저장되지 않은 캡션이 있습니다. 그사이 다른 곳에서 캡션이 바뀌었거나
-            잠겨 있어 자동으로 적용하지 않았습니다.
-          </p>
-          <blockquote>{s.captionConflict}</blockquote>
-          <button
-            className="tiny"
-            disabled={p.locks.caption}
-            onClick={() => s.applyCaptionConflict()}
-          >
-            {p.locks.caption ? "잠금 해제 후 적용" : "적용"}
-          </button>{" "}
-          <button className="tiny" onClick={() => s.discardCaptionConflict()}>
-            버리기
-          </button>
-        </div>
-      )}
       <hr />
       <label>
         메인 카드 배경 이미지 <span>첫 번째 카드 · 표지</span>

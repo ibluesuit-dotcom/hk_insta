@@ -32,7 +32,7 @@ async function generate(page: Page) {
   await page.getByRole("button", { name: "생성", exact: true }).click();
   const p = await (await response).json();
   await expect(page.locator(".feed-image img")).toBeVisible();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   return p;
 }
 
@@ -41,7 +41,7 @@ test("caption autosaves without re-rendering, regenerates, locks and exports", a
   request,
 }) => {
   const original = await generate(page);
-  const caption = page.getByLabel("게시글 캡션", { exact: true });
+  const caption = page.getByLabel("짧은 캡션 글", { exact: true });
   await expect(caption).toHaveValue(original.copy.caption);
   const download = page.getByRole("link", { name: "내보내기", exact: true });
   await expect(download).toHaveAttribute("aria-disabled", "false");
@@ -69,17 +69,22 @@ test("caption autosaves without re-rendering, regenerates, locks and exports", a
     "직접 고친 캡션입니다.",
   );
 
-  const regen = page
-    .locator("label", { hasText: "게시글 캡션" })
-    .getByRole("button", { name: "↻ 다시 생성" });
-  const regenerated = page.waitForResponse(
-    (r) => r.request().method() === "PUT" && r.url().endsWith(original.id),
-  );
+  // Regenerating makes a candidate; the caption changes only on apply.
+  const regen = page.getByRole("button", { name: "다시 생성" });
   await regen.click();
-  await expect(caption).toHaveValue(original.copy.caption);
+  const candidate = page.locator(".post-candidate");
+  await expect(candidate).toContainText("원문 대조 통과");
+  await expect(caption).toHaveValue("직접 고친 캡션입니다.");
+  const regenerated = page.waitForResponse((r) =>
+    r.url().endsWith("/post-text/apply"),
+  );
+  await candidate.getByRole("button", { name: "이 후보 적용" }).click();
   const q = await (await regenerated).json();
-  expect(q.copy.caption).toBe(original.copy.caption);
+  expect(q.copy.caption).not.toBe("직접 고친 캡션입니다.");
+  await expect(caption).toHaveValue(q.copy.caption);
   expect(q.renderRevision).toBe(q.revision);
+  expect(q.postText.shortReview.overall).toBe("pass");
+  await expect(page.locator(".post-review")).toContainText("원문 대조 통과");
   await expect(download).toHaveAttribute("aria-disabled", "false");
 
   await page.getByRole("button", { name: "caption 잠금" }).click();
@@ -112,8 +117,8 @@ test("a leftover caption draft is saved on open instead of shadowing the server 
       original.id,
     ),
   ).toBe("{}");
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
-  await expect(page.getByLabel("게시글 캡션", { exact: true })).toHaveValue(
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
+  await expect(page.getByLabel("짧은 캡션 글", { exact: true })).toHaveValue(
     "예전 방식 초안",
   );
 });
@@ -129,7 +134,7 @@ test("a caption whose save failed survives a reload and is saved then", async ({
   );
   const failed = page.waitForEvent("requestfailed", put);
   await page
-    .getByLabel("게시글 캡션", { exact: true })
+    .getByLabel("짧은 캡션 글", { exact: true })
     .fill("저장 실패한 캡션");
   await failed;
   await page.unroute(`**/api/projects/${original.id}`);
@@ -200,7 +205,7 @@ async function failCaptionSave(page: Page, id: string, text: string) {
     put(route.request()) ? route.abort() : route.continue(),
   );
   const failed = page.waitForEvent("requestfailed", put);
-  await page.getByLabel("게시글 캡션", { exact: true }).fill(text);
+  await page.getByLabel("짧은 캡션 글", { exact: true }).fill(text);
   await failed;
   await page.unroute(`**/api/projects/${id}`);
 }
@@ -232,10 +237,10 @@ test("an unsaved caption is not auto-applied over another window's caption", asy
     if (r.method() === "PUT") puts++;
   });
   await page.reload();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   const notice = page.locator(".caption-conflict");
   await expect(notice).toContainText("A창 캡션");
-  await expect(page.getByLabel("게시글 캡션", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("짧은 캡션 글", { exact: true })).toHaveValue(
     "B창 캡션",
   );
   await page.waitForTimeout(1000);
@@ -263,7 +268,7 @@ test("a locked caption keeps the unsaved copy until the user discards it", async
     p.locks = { ...p.locks, caption: true };
   });
   await page.reload();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   const notice = page.locator(".caption-conflict");
   await expect(notice).toContainText("잠기기 전 캡션");
   await expect(
@@ -277,7 +282,7 @@ test("a locked caption keeps the unsaved copy until the user discards it", async
   expect(await pending()).toBe("잠기기 전 캡션");
 
   await page.reload();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   await expect(notice).toContainText("잠기기 전 캡션");
   await notice.getByRole("button", { name: "버리기" }).click();
   await expect(notice).toHaveCount(0);
@@ -292,17 +297,17 @@ test("typing while the recovery notice is shown keeps the recovered caption", as
   await failCaptionSave(page, original.id, "복구할 캡션");
   await otherWindowSave(request, original.id, (p) => (p.copy.caption = "B"));
   await page.reload();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   const notice = page.locator(".caption-conflict");
   await expect(notice).toContainText("복구할 캡션");
   const saved = page.waitForResponse(
     (r) => r.request().method() === "PUT" && r.url().endsWith(original.id),
   );
-  await page.getByLabel("게시글 캡션", { exact: true }).fill("B 수정");
+  await page.getByLabel("짧은 캡션 글", { exact: true }).fill("B 수정");
   expect((await (await saved).json()).copy.caption).toBe("B 수정");
   await expect(notice).toContainText("복구할 캡션");
   await page.reload();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   await expect(notice).toContainText("복구할 캡션");
 });
 
@@ -315,14 +320,14 @@ test("a real 409 conflict is not auto-applied after reload", async ({
   const rejected = page.waitForResponse(
     (r) => r.request().method() === "PUT" && r.url().endsWith(original.id),
   );
-  await page.getByLabel("게시글 캡션", { exact: true }).fill("A창");
+  await page.getByLabel("짧은 캡션 글", { exact: true }).fill("A창");
   expect((await rejected).status()).toBe(409);
   let puts = 0;
   page.on("request", (r) => {
     if (r.method() === "PUT") puts++;
   });
   await page.reload();
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   await expect(page.locator(".caption-conflict")).toContainText("A창");
   await page.waitForTimeout(1000);
   expect(puts).toBe(0);
@@ -346,7 +351,7 @@ test("typing during a save then failing the next save recovers without a false c
     }
     return route.abort();
   });
-  const caption = page.getByLabel("게시글 캡션", { exact: true });
+  const caption = page.getByLabel("짧은 캡션 글", { exact: true });
   const first = page.waitForRequest(
     (r) => r.method() === "PUT" && r.url().endsWith(original.id),
   );
@@ -361,6 +366,6 @@ test("typing during a save then failing the next save recovers without a false c
   );
   await page.reload();
   expect((await (await saved).json()).copy.caption).toBe("첫 저장 뒤 추가");
-  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
   await expect(page.locator(".caption-conflict")).toHaveCount(0);
 });

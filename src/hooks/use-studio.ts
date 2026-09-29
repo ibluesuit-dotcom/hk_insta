@@ -19,6 +19,12 @@ import {
   draftItem,
   reorderDrafts,
 } from "../../shared/editor-drafts";
+import {
+  defaultPostOptions,
+  type PostFormat,
+  type PostOptions,
+  type PostText,
+} from "../../shared/post-text";
 import { api } from "../api";
 import { copyText } from "../browser";
 import { captionKey, draftsStorageKey, keepPageDraftsBelow } from "../format";
@@ -53,6 +59,30 @@ export type AiState = {
   slots: Record<AiVariant, AiSlot>;
 };
 export const AI_VARIANTS: AiVariant[] = ["photo", "art"];
+export type GenFormat = Exclude<PostFormat, "full">;
+/** A generated post text waiting to be applied or discarded. */
+export type PostCandidate = {
+  id: string;
+  format: GenFormat;
+  text: string;
+  warnings: string[];
+  omitted: string[];
+  lengthExceptionReason: string | null;
+  review: {
+    overall: "pass" | "fail" | "needs_review";
+    issues: string[];
+    missing: string[];
+  } | null;
+  reviewError: string | null;
+  ratio: number;
+  model: string;
+};
+export type PostJob = {
+  status: "generating" | "done" | "failed";
+  request: number;
+  candidate?: PostCandidate;
+  error?: string;
+};
 const emptyAi = (projectId: string): AiState => ({
   projectId,
   notice: "",
@@ -120,6 +150,23 @@ export function useStudio() {
   const [clipboardStatus, setClipboardStatus] = useState("");
   const [sourceCopyStatus, setSourceCopyStatus] = useState("");
   const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([]);
+  // Post step: the format on screen (not the export format), per-format
+  // options for the next generation and generation jobs. Generation runs
+  // outside the global busy lock; its result is only a candidate.
+  const [postView, setPostView] = useState<PostFormat>("short");
+  const [postOptions, setPostOptions] = useState<
+    Record<GenFormat, PostOptions>
+  >({
+    short: defaultPostOptions(),
+    summary: defaultPostOptions(),
+    bullets: defaultPostOptions(),
+  });
+  const [postJobs, setPostJobs] = useState<Partial<Record<GenFormat, PostJob>>>(
+    {},
+  );
+  const postRequest = useRef(0);
+  const postProject = useRef("");
+  const [postCopyStatus, setPostCopyStatus] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [health, setHealth] = useState<any>({});
@@ -200,6 +247,10 @@ export function useStudio() {
       draftsRef.current = stored;
       setDrafts(stored);
       saveBlocked.current = false;
+      postProject.current = next.id;
+      setPostJobs({});
+      setPostView(next.postText?.selected ?? "short");
+      setPostCopyStatus("");
       aiGeneration.current++;
       aiRef.current = emptyAi(next.id);
       setAiState(aiRef.current);
@@ -898,6 +949,103 @@ export function useStudio() {
     });
     if (ok) setIndex(Math.min(i + 1, ref.current!.count));
   }
+  // ---- Post texts --------------------------------------------------------
+  function setPostJob(
+    projectId: string,
+    format: GenFormat,
+    job: PostJob | undefined,
+  ) {
+    if (postProject.current !== projectId) return;
+    setPostJobs((jobs) => {
+      const current = jobs[format];
+      // A late answer to an older request never replaces a newer one.
+      if (job && current && job.request < current.request) return jobs;
+      return { ...jobs, [format]: job };
+    });
+  }
+  /** Creates a candidate; the text on screen stays until it is applied. */
+  async function generatePostText(format: GenFormat) {
+    const project = ref.current;
+    if (!project || postJobs[format]?.status === "generating") return;
+    const request = ++postRequest.current;
+    setPostJob(project.id, format, { status: "generating", request });
+    try {
+      const current = await flush();
+      const candidate: PostCandidate = await api(
+        `/projects/${current.id}/post-text/candidates`,
+        "POST",
+        { revision: current.revision, format, options: postOptions[format] },
+      );
+      setPostJob(project.id, format, { status: "done", request, candidate });
+    } catch (e) {
+      setPostJob(project.id, format, {
+        status: "failed",
+        request,
+        error: (e as Error).message,
+      });
+    }
+  }
+  function discardPostCandidate(format: GenFormat) {
+    if (ref.current) setPostJob(ref.current.id, format, undefined);
+  }
+  async function applyPostCandidate(format: GenFormat, acceptFailed = false) {
+    const candidate = postJobs[format]?.candidate;
+    if (!candidate) return;
+    const ok = await run("게시글 후보 적용 중", async () => {
+      const current = await flush();
+      accept(
+        await api(`/projects/${current.id}/post-text/apply`, "POST", {
+          candidateId: candidate.id,
+          revision: current.revision,
+          acceptFailed,
+        }),
+      );
+    });
+    if (ok) discardPostCandidate(format);
+  }
+  /** "검증만 다시": checks the saved text again without generating. */
+  function verifyPostText(format: PostFormat) {
+    return run("원문과 대조하는 중", async () => {
+      const current = await flush();
+      accept(
+        await api(`/projects/${current.id}/post-text/verify`, "POST", {
+          revision: current.revision,
+          format,
+        }),
+      );
+    });
+  }
+  /** Edits a stored format's text; the server decides provenance and review. */
+  function setPostText(format: Exclude<PostFormat, "short">, text: string) {
+    edit((p) => {
+      const postText: PostText = p.postText ?? { selected: "short" };
+      postText[format] = {
+        provenance: "manual",
+        sourceHash: null,
+        ...postText[format],
+        text,
+      };
+      return { ...p, postText };
+    });
+  }
+  function setExportFormat(format: PostFormat) {
+    edit((p) => ({
+      ...p,
+      postText: { ...(p.postText ?? {}), selected: format },
+    }));
+  }
+  async function copyPost(text: string) {
+    if (!text.trim()) {
+      setPostCopyStatus("복사할 글이 없습니다.");
+      return;
+    }
+    const copied = await copyText(text);
+    setPostCopyStatus(
+      copied
+        ? `${[...text].length.toLocaleString()}자를 복사했습니다.`
+        : "복사하지 못했습니다. 글을 선택해 직접 복사해 주세요.",
+    );
+  }
   async function files(files: FileList | null) {
     if (!files) return;
     await run("파일에서 텍스트 추출 중", async () => {
@@ -976,6 +1124,20 @@ export function useStudio() {
     pageField,
     photo,
     files,
+    postView,
+    setPostView,
+    postOptions,
+    setPostOptions,
+    postJobs,
+    generatePostText,
+    discardPostCandidate,
+    applyPostCandidate,
+    verifyPostText,
+    setPostText,
+    setExportFormat,
+    copyPost,
+    postCopyStatus,
+    setCaption,
     toPhotoCard,
     toTextCard,
     replaceCardPhoto,

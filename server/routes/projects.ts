@@ -5,6 +5,7 @@ import {
   profileOnlyChange,
   type Project,
 } from "../../shared/model";
+import { mergePostText } from "../../shared/post-text";
 import { list, read, save, mutate } from "../store";
 import { wrap, validateProject } from "../http";
 import { aiAssetIdOf, backgroundFromSidecar } from "../../shared/ai-background";
@@ -12,9 +13,11 @@ import { assetUsableBy, foreignAsset, loadSidecar } from "../ai-background";
 
 const cardLayout = (p: Project) =>
   JSON.stringify(
-    p.copy.pages.map((pg) =>
-      isPhotoPage(pg) ? ["photo", pg.photoCard?.photo] : ["text"],
-    ),
+    p.copy.pages.map((pg) => [
+      pg.id ?? "",
+      isPhotoPage(pg) ? "photo" : "text",
+      isPhotoPage(pg) ? pg.photoCard?.photo : "",
+    ]),
   );
 // Project CRUD and version history.
 export const projectsRouter = express.Router();
@@ -67,11 +70,14 @@ projectsRouter.put(
         const displayOnly = profileOnlyChange(old, input);
         const p = {
           ...input,
+          // Review and provenance of post texts are the server's to decide.
+          postText: mergePostText(old, input),
           background,
           id: old.id,
           versions: old.versions,
           // Old images must not show under another card: when cards are
-          // added, removed or change kind or photo, only the cover image stays.
+          // added, removed, moved or change kind or photo, only the cover
+          // image stays.
           renders:
             cardLayout(old) === cardLayout(input)
               ? old.renders

@@ -9,6 +9,7 @@ import { sourcesRouter } from "./routes/sources";
 import { photosRouter } from "./routes/photos";
 import { generateRouter } from "./routes/generate";
 import { outputRouter } from "./routes/output";
+import { postTextRouter } from "./routes/post-text";
 import {
   aiBackgroundRouter,
   aiBackgroundGenerate,
@@ -74,6 +75,7 @@ export async function createApp() {
   app.use(generateRouter);
   app.use(outputRouter);
   app.use(aiBackgroundRouter);
+  app.use(postTextRouter);
   if (process.env.NODE_ENV === "production") {
     app.use(express.static("dist"));
     app.get("/{*path}", (_req, res) =>

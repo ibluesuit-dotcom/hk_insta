@@ -12,15 +12,27 @@ export const usageLimits = () => ({
   images: Number(process.env.AI_DAILY_IMAGE_LIMIT || 60),
   briefs: Number(process.env.AI_DAILY_BRIEF_LIMIT || 60),
   imagesPerMinute: Number(process.env.AI_IMAGES_PER_MINUTE || 4),
+  // Post text: one generation and one source check per request.
+  postTexts: Number(process.env.AI_DAILY_POST_TEXT_LIMIT || 100),
+  postVerifies: Number(process.env.AI_DAILY_POST_VERIFY_LIMIT || 150),
+  postPerMinute: Number(process.env.AI_POST_PER_MINUTE || 6),
 });
 const count = z.number().int().nonnegative();
 const usageSchema = z
   .object({
     days: z.record(
       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      z.object({ briefs: count, images: count }).strict(),
+      z
+        .object({
+          briefs: count,
+          images: count,
+          postTexts: count.default(0),
+          postVerifies: count.default(0),
+        })
+        .strict(),
     ),
     recentImages: z.array(z.number()),
+    recentPosts: z.array(z.number()).default([]),
   })
   .strict();
 type Usage = z.infer<typeof usageSchema>;
@@ -38,7 +50,7 @@ async function load(): Promise<Usage> {
     text = await fs.readFile(usageFile(), "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT")
-      return { days: {}, recentImages: [] };
+      return { days: {}, recentImages: [], recentPosts: [] };
     console.error("AI 사용량 기록을 읽지 못했습니다:", e);
     throw fail(
       "AI 사용량 기록을 읽지 못해 생성을 중단했습니다.",
@@ -60,13 +72,43 @@ async function load(): Promise<Usage> {
 
 let queue: Promise<unknown> = Promise.resolve();
 /** Check limits and durably record one call before it is made. */
-export function reserve(kind: "brief" | "image", now = Date.now()) {
+export function reserve(
+  kind: "brief" | "image" | "postText" | "postVerify",
+  now = Date.now(),
+) {
   const task = queue.then(async () => {
     const usage = await load();
     const limits = usageLimits();
     const day = kstDay(now);
-    const today = usage.days[day] || { briefs: 0, images: 0 };
-    if (kind === "image") {
+    const today = usage.days[day] || {
+      briefs: 0,
+      images: 0,
+      postTexts: 0,
+      postVerifies: 0,
+    };
+    if (kind === "postText" || kind === "postVerify") {
+      usage.recentPosts = usage.recentPosts.filter(
+        (t) => t > now - 60_000 && t <= now,
+      );
+      if (usage.recentPosts.length >= limits.postPerMinute)
+        throw fail(
+          "AI 게시글 요청이 많습니다. 1분 뒤 다시 시도하세요.",
+          "AI_RATE",
+          429,
+        );
+      const [field, limit, label] =
+        kind === "postText"
+          ? (["postTexts", limits.postTexts, "게시글 생성"] as const)
+          : (["postVerifies", limits.postVerifies, "원문 대조"] as const);
+      if (today[field] >= limit)
+        throw fail(
+          `오늘 AI ${label} 한도(${limit}회)를 모두 사용했습니다.`,
+          "AI_LIMIT",
+          429,
+        );
+      today[field]++;
+      usage.recentPosts.push(now);
+    } else if (kind === "image") {
       usage.recentImages = usage.recentImages.filter(
         (t) => t > now - 60_000 && t <= now,
       );

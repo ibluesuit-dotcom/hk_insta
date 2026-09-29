@@ -5,6 +5,7 @@ import {
   photoPathAllowed,
   type Background,
 } from "./ai-background";
+import { postTextSchema, type PostText } from "./post-text";
 export const Versions = {
   template: "fullbleed-1.1",
   prompt: "editorial-1.2",
@@ -62,6 +63,8 @@ export type PhotoCard = {
  * and a photoCard stays stored after switching back, so both round-trip.
  */
 export type Page = AiCopy["pages"][number] & {
+  /** Stable card identity, given by the server; survives moves and edits. */
+  id?: string;
   kind?: "text" | "photo";
   photoCard?: PhotoCard;
 };
@@ -99,6 +102,8 @@ export interface Project {
     lines: string[];
   };
   highlightFrom?: number | null;
+  /** Full article, summary and bullets post texts plus the export format. */
+  postText?: PostText;
   profile: string;
   profilePhoto: string;
   status: string;
@@ -198,6 +203,9 @@ export function mergeCopy(p: Project, next: Copy, scope: string) {
     "caption",
     "alt",
   ] as const) {
+    // A full generation fills only an empty caption; post texts are written
+    // in the post step and never replaced by card generation.
+    if (key === "caption" && scope === "all" && p.copy.caption.trim()) continue;
     if ((scope === "all" || scope === key) && !p.locks[key]) {
       (c as any)[key] = next[key];
       if (key === "headline") {
@@ -249,6 +257,10 @@ const photoCardSchema = z
 const draftPage = pageSchema
   .extend({
     evidence: z.array(z.string().max(60000)).max(100),
+    id: z
+      .string()
+      .regex(/^[\w-]{1,40}$/)
+      .optional(),
     kind: z.enum(["text", "photo"]).optional(),
     photoCard: photoCardSchema.optional(),
   })
@@ -332,6 +344,7 @@ export const projectSchema = z
       .optional(),
     coverRenderRevision: z.number().int().nonnegative().default(0),
     highlightFrom: z.number().int().min(0).max(2).nullable().optional(),
+    postText: postTextSchema.optional(),
     profile: draftText,
     profilePhoto: uploadPath,
     status: z.enum([
@@ -407,10 +420,11 @@ export const projectSchema = z
         message: `사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다.`,
       });
   });
-// The post caption is not drawn on any card, so it is left out of the card comparison.
+// Post texts (the caption and the other formats) are not drawn on any card,
+// so they are left out of the card comparison.
 function withoutCaption(p: Project) {
   const { caption: _lock, ...locks } = p.locks;
-  return { ...p, copy: { ...p.copy, caption: "" }, locks };
+  return { ...p, copy: { ...p.copy, caption: "" }, locks, postText: undefined };
 }
 // Only display settings and the post caption may retain card approval and
 // render freshness; the server independently checks this.
@@ -475,9 +489,17 @@ export function cardAlt(p: Project, i: number) {
 export function textView(p: Project) {
   const map = p.copy.pages.flatMap((pg, i) => (isPhotoPage(pg) ? [] : [i]));
   const view = structuredClone(p);
-  view.copy.pages = map.length
-    ? map.map((i) => p.copy.pages[i])
-    : [emptyPage()];
+  // The AI sees text fields only: no card ID, kind or stored photo.
+  view.copy.pages = (
+    map.length ? map.map((i) => p.copy.pages[i]) : [emptyPage()]
+  ).map(({ role, title, body, highlight, evidence, alt }) => ({
+    role,
+    title,
+    body,
+    highlight,
+    evidence,
+    alt,
+  }));
   view.count = view.copy.pages.length;
   view.locks = Object.fromEntries(
     Object.entries(p.locks).flatMap(([k, v]) => {
@@ -609,6 +631,20 @@ export function headlineEditorText(p: Project) {
   return encodeHeadlineLines(
     parsed.manual ? parsed.manual.split("\n") : [parsed.text],
   );
+}
+/**
+ * For a save that changes post text only: images that were current stay
+ * current at the next revision; stale ones are never promoted.
+ */
+export function carryRenderFreshness(p: Project) {
+  return {
+    renderRevision:
+      p.renderRevision === p.revision ? p.revision + 1 : p.renderRevision,
+    coverRenderRevision:
+      p.coverRenderRevision === p.revision
+        ? p.revision + 1
+        : p.coverRenderRevision,
+  };
 }
 export function renderFresh(p: Project) {
   return (

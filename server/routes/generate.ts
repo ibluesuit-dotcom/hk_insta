@@ -26,6 +26,10 @@ generateRouter.post(
       .string()
       .regex(/^(all|headline|kicker|keywords|caption|alt|pages|page:[0-7])$/)
       .parse(req.body.scope);
+    if (scope === "caption")
+      throw new Error(
+        "게시글은 03 인스타 게시글 단계에서 생성하세요. 원문 대조 검증을 함께 거칩니다.",
+      );
     if ((scope === "all" || scope === "headline") && p.sourceTitle.trim())
       sourceHeadline(p.sourceTitle);
     if (

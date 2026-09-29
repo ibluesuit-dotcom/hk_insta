@@ -123,6 +123,24 @@ test("mixed text/photo cards: AI writes text cards only, render and ZIP follow k
     kind: "photo",
   });
 
+  // Every card has a stable ID; editing text keeps the (stale) images, while
+  // moving two text cards drops them so neither shows the other's image.
+  expect(new Set(p.copy.pages.map((pg: any) => pg.id)).size).toBe(3);
+  const images = p.renders;
+  await put((p) => {
+    p.copy.pages[0].title = "고친 제목";
+  });
+  expect(p.renders).toEqual(images);
+  await put((p) => {
+    [p.copy.pages[0], p.copy.pages[2]] = [p.copy.pages[2], p.copy.pages[0]];
+  });
+  expect(p.renders).toEqual([images[0]]);
+  const again = await request.post(`/api/projects/${p.id}/render`, {
+    data: { revision: p.revision },
+  });
+  expect(again.ok(), await again.text()).toBe(true);
+  p = await again.json();
+
   // Changing a card's kind or photo drops the old images, except the cover.
   const before = p.renders[0];
   await put((p) => {

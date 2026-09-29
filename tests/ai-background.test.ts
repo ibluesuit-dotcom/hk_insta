@@ -462,7 +462,8 @@ test("image b64 is stored as original and normalized card; blocked and 429 are m
   imageReply = () => ({
     status: 429,
     error: {
-      message: "You have no credits remaining. Add credits to continue using the API.",
+      message:
+        "You have no credits remaining. Add credits to continue using the API.",
       type: "insufficient_quota",
       code: "credit_balance_exhausted",
     },
@@ -1419,8 +1420,74 @@ test("unauthenticated requests to every new route and AI uploads are 401", async
 
 test("isQuotaExhausted distinguishes credit exhaustion from ordinary rate limits", async () => {
   const { isQuotaExhausted } = await import("../server/openai-errors");
-  assert.equal(isQuotaExhausted({ status: 429, type: "insufficient_quota", code: "credit_balance_exhausted" }), true);
-  assert.equal(isQuotaExhausted({ status: 429, type: "insufficient_quota", code: "insufficient_quota" }), true);
-  assert.equal(isQuotaExhausted({ status: 429, type: "requests", code: "rate_limit_exceeded" }), false);
-  assert.equal(isQuotaExhausted({ status: 400, code: "insufficient_quota" }), false);
+  assert.equal(
+    isQuotaExhausted({
+      status: 429,
+      type: "insufficient_quota",
+      code: "credit_balance_exhausted",
+    }),
+    true,
+  );
+  assert.equal(
+    isQuotaExhausted({
+      status: 429,
+      type: "insufficient_quota",
+      code: "insufficient_quota",
+    }),
+    true,
+  );
+  assert.equal(
+    isQuotaExhausted({
+      status: 429,
+      type: "requests",
+      code: "rate_limit_exceeded",
+    }),
+    false,
+  );
+  assert.equal(
+    isQuotaExhausted({ status: 400, code: "insufficient_quota" }),
+    false,
+  );
+});
+
+test("usage: post text limits, their own minute window and old usage files", async () => {
+  await fs.rm(usage.usageFile(), { force: true });
+  // A file written before post limits existed still reads.
+  await fs.writeFile(
+    usage.usageFile(),
+    JSON.stringify({
+      days: { [today()]: { briefs: 1, images: 2 } },
+      recentImages: [],
+    }),
+  );
+  process.env.AI_POST_PER_MINUTE = "3";
+  process.env.AI_DAILY_POST_TEXT_LIMIT = "3";
+  try {
+    const t = Date.now();
+    await usage.reserve("postText", t);
+    await usage.reserve("postVerify", t + 1);
+    await usage.reserve("postText", t + 2);
+    await assert.rejects(
+      usage.reserve("postVerify", t + 3),
+      (e: any) => e.code === "AI_RATE",
+    );
+    // Images are counted separately.
+    await usage.reserve("image", t + 4);
+    await usage.reserve("postText", t + 61_000);
+    await assert.rejects(
+      usage.reserve("postText", t + 62_000),
+      (e: any) => e.code === "AI_LIMIT",
+    );
+    const saved = JSON.parse(await fs.readFile(usage.usageFile(), "utf8"));
+    assert.deepEqual(saved.days[today()], {
+      briefs: 1,
+      images: 3,
+      postTexts: 3,
+      postVerifies: 1,
+    });
+  } finally {
+    process.env.AI_POST_PER_MINUTE = "1000";
+    process.env.AI_DAILY_POST_TEXT_LIMIT = "1000";
+    await fs.rm(usage.usageFile(), { force: true });
+  }
 });

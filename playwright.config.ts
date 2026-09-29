@@ -13,7 +13,7 @@ export default defineConfig({
   workers: 1,
   webServer: {
     command:
-      "MOCK_AI=1 MOCK_DELAY=800 AI_BACKGROUND_GENERATE=1 DATA_DIR=data/e2e PORT=4311 npm run dev",
+      "MOCK_AI=1 MOCK_DELAY=800 AI_BACKGROUND_GENERATE=1 AI_POST_PER_MINUTE=100000 AI_DAILY_POST_TEXT_LIMIT=100000 AI_DAILY_POST_VERIFY_LIMIT=100000 DATA_DIR=data/e2e PORT=4311 npm run dev",
     url: "http://127.0.0.1:4311/api/health",
     reuseExistingServer: true,
   },

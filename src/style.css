@@ -1604,3 +1604,65 @@ header h1 {
 .photo-meta {
   margin-top: 14px;
 }
+
+/* Instagram post step */
+.post-formats {
+  flex-wrap: wrap;
+}
+.post-editor {
+  min-height: 220px;
+}
+.post-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.post-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.post-review.pass {
+  color: #30704e;
+}
+.post-review.fail,
+.post-review.stale_source {
+  color: #b3261e;
+}
+.post-review.needs_review {
+  color: #b57b1c;
+}
+.post-review .hint,
+.post-review details {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 400;
+}
+.post-candidate {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #cfd8d3;
+  border-radius: 7px;
+  background: #f8faf7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.post-candidate.failed {
+  border-color: #e3b4ae;
+  color: #b3261e;
+}
+.post-candidate blockquote {
+  margin: 0;
+  padding: 10px 12px;
+  background: white;
+  border-left: 3px solid #30704e;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.post-options {
+  margin: 10px 0;
+}

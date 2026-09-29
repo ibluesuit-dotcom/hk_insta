@@ -3,6 +3,7 @@ import { Icon } from "../icons";
 import { PreviewImage } from "../preview-image";
 import { Studio } from "../hooks/use-studio";
 import { cardAlt, cardKind } from "../../shared/model";
+import { exportCaption } from "../../shared/post-text";
 
 /** Right-hand live output: phone mockup / original card, render and export. */
 export function PreviewPanel({ s }: { s: Studio }) {
@@ -130,7 +131,7 @@ export function PreviewPanel({ s }: { s: Studio }) {
             </div>
             <div className="ig-caption">
               <b>{p.profile}</b>{" "}
-              {committed!.copy.caption ||
+              {exportCaption(committed!) ||
                 "원문을 바탕으로, 오늘의 경제를 쉽게 전합니다."}
               <small>미리보기 · 실제 게시물이나 통계가 아닙니다</small>
             </div>
