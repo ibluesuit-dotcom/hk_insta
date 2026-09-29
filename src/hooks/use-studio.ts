@@ -65,6 +65,8 @@ export type PostCandidate = {
   id: string;
   format: GenFormat;
   text: string;
+  /** This format's text when the candidate was made. */
+  baseText: string;
   warnings: string[];
   omitted: string[];
   lengthExceptionReason: string | null;
@@ -988,7 +990,11 @@ export function useStudio() {
   function discardPostCandidate(format: GenFormat) {
     if (ref.current) setPostJob(ref.current.id, format, undefined);
   }
-  async function applyPostCandidate(format: GenFormat, acceptFailed = false) {
+  async function applyPostCandidate(
+    format: GenFormat,
+    acceptFailed = false,
+    replaceEdited = false,
+  ) {
     const candidate = postJobs[format]?.candidate;
     if (!candidate) return;
     const ok = await run("게시글 후보 적용 중", async () => {
@@ -998,10 +1004,35 @@ export function useStudio() {
           candidateId: candidate.id,
           revision: current.revision,
           acceptFailed,
+          replaceEdited,
         }),
       );
     });
     if (ok) discardPostCandidate(format);
+  }
+  /** Checks a candidate against the source again, without generating. */
+  async function reverifyPostCandidate(format: GenFormat) {
+    const project = ref.current;
+    const job = postJobs[format];
+    if (!project || !job?.candidate) return;
+    const request = ++postRequest.current;
+    setPostJob(project.id, format, { ...job, status: "generating", request });
+    try {
+      const candidate: PostCandidate = await api(
+        `/projects/${project.id}/post-text/candidates/${job.candidate.id}/verify`,
+        "POST",
+      );
+      setPostJob(project.id, format, { status: "done", request, candidate });
+    } catch (e) {
+      setPostJob(project.id, format, {
+        status: "done",
+        request,
+        candidate: {
+          ...job.candidate,
+          reviewError: (e as Error).message,
+        },
+      });
+    }
   }
   /** "검증만 다시": checks the saved text again without generating. */
   function verifyPostText(format: PostFormat) {
@@ -1132,6 +1163,7 @@ export function useStudio() {
     generatePostText,
     discardPostCandidate,
     applyPostCandidate,
+    reverifyPostCandidate,
     verifyPostText,
     setPostText,
     setExportFormat,

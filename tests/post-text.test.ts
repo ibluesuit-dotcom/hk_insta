@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { blank, mergeCopy } from "../shared/model";
 import { sourceHash } from "../shared/ai-background";
 import {
+  articleHash,
   exportCaption,
   measure,
   mergePostText,
   reviewState,
+  sourceDocumentCount,
   textHash,
   type PostReview,
 } from "../shared/post-text";
@@ -28,7 +30,7 @@ function project() {
 const review = (text: string, overall: PostReview["overall"] = "pass") => ({
   overall,
   textHash: textHash(text),
-  sourceHash: sourceHash(project()),
+  sourceHash: articleHash(project()),
   checkedAt: "t",
   issues: [],
   missing: [],
@@ -154,13 +156,40 @@ test("a contradiction always fails; a serious unsupported claim needs review", (
   assert.equal(toReview(v("ambiguous", "low"), "t", project()).overall, "pass");
 });
 
-test("card generation fills only an empty caption", () => {
+test("card generation never writes the caption, even an empty one", () => {
   const p = project();
   const next = structuredClone(p.copy);
   next.caption = "AI 캡션";
   assert.equal(mergeCopy(p, next, "all").caption, "짧은 캡션");
   p.copy.caption = "";
-  assert.equal(mergeCopy(p, next, "all").caption, "AI 캡션");
+  assert.equal(mergeCopy(p, next, "all").caption, "");
+});
+
+test("a review goes stale when the publication time or subtitle changes", () => {
+  const p = project();
+  p.publishedAt = "2025-09-01";
+  p.postText = {
+    selected: "short",
+    shortReview: { ...review("짧은 캡션"), sourceHash: articleHash(p) },
+  };
+  assert.equal(reviewState(p, "short"), "pass");
+  p.publishedAt = "2026-09-01";
+  assert.equal(reviewState(p, "short"), "stale_source");
+  p.publishedAt = "2025-09-01";
+  p.sourceSubtitle = "부제";
+  assert.equal(reviewState(p, "short"), "stale_source");
+});
+
+test("a loaded URL article and an attachment are two documents", () => {
+  const p = project();
+  assert.equal(sourceDocumentCount(p), 0);
+  p.sourceUrl = "https://example.com/a";
+  assert.equal(sourceDocumentCount(p), 1);
+  p.attachments = [
+    { name: "b.txt", text: "둘째 기사" },
+    { name: "c.txt", text: "", error: "실패" },
+  ];
+  assert.equal(sourceDocumentCount(p), 2);
 });
 
 test("lengths are counted as NFC code points with LF breaks", () => {

@@ -7,9 +7,11 @@ import { root } from "./store";
 import { key, transportFormat } from "./ai";
 import { reserve } from "./ai-usage";
 import { isQuotaExhausted } from "./openai-errors";
-import { sourceHash } from "../shared/ai-background";
 import {
   LENGTH_RATIO,
+  ONE_ARTICLE_MESSAGE,
+  articleHash,
+  sourceDocumentCount,
   measure,
   textHash,
   type PostOptions,
@@ -185,7 +187,7 @@ export function candidateText(format: GenFormat, out: Generation) {
 export function toReview(
   v: Verification,
   text: string,
-  p: Pick<Project, "source" | "sourceTitle">,
+  p: Pick<Project, "source" | "sourceTitle" | "sourceSubtitle" | "publishedAt">,
 ): PostReview {
   const checks = v.claimChecks;
   let overall = v.overall;
@@ -198,7 +200,7 @@ export function toReview(
   return {
     overall,
     textHash: textHash(text),
-    sourceHash: sourceHash(p),
+    sourceHash: articleHash(p),
     checkedAt: new Date().toISOString(),
     issues: checks
       .filter((c) => c.verdict !== "supported")
@@ -389,10 +391,7 @@ function mockVerification(p: Project): Verification {
 }
 
 export function assertSummarizable(p: Project) {
-  if (p.attachments.filter((a) => !a.error && a.text.trim()).length > 1)
-    throw fail(
-      "요약은 한 기사만 지원합니다. 요약할 기사 하나만 원문에 남겨 주세요.",
-    );
+  if (sourceDocumentCount(p) > 1) throw fail(ONE_ARTICLE_MESSAGE);
   if (p.source.trim().length < 30)
     throw fail("원문을 30자 이상 입력하세요.", "EXTRACTION");
 }
@@ -451,7 +450,9 @@ export const candidateSchema = z
     projectId: z.string(),
     format: z.enum(["short", "summary", "bullets"]),
     baseRevision: z.number().int(),
+    // Article inputs and the target format's text when it was generated.
     sourceHash: z.string(),
+    baseText: z.string(),
     options: z.unknown(),
     text: z.string(),
     warnings: z.array(z.string()),
@@ -469,6 +470,7 @@ const candidateFile = (id: string) =>
   path.join(root, "post-candidates", z.string().uuid().parse(id) + ".json");
 
 export async function saveCandidate(c: Candidate) {
+  candidateSchema.parse(c);
   await fs.mkdir(path.dirname(candidateFile(c.id)), { recursive: true });
   await fs.writeFile(candidateFile(c.id), JSON.stringify(c));
 }

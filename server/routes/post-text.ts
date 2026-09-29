@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { read, save, mutate } from "../store";
 import { wrap } from "../http";
-import { sourceHash } from "../../shared/ai-background";
 import { carryRenderFreshness } from "../../shared/model";
 import {
+  articleHash,
   measure,
   postOptionsSchema,
   postTextOf,
@@ -62,7 +62,8 @@ postTextRouter.post(
       projectId: p.id,
       format,
       baseRevision: p.revision,
-      sourceHash: sourceHash(p),
+      sourceHash: articleHash(p),
+      baseText: postTextOf(p, format),
       options,
       text: generated.text,
       warnings: generated.out.warnings,
@@ -94,10 +95,20 @@ postTextRouter.post(
           throw conflict("다른 작업의 게시글 후보입니다.", "STALE");
         if (p.revision !== req.body.revision)
           throw conflict("저장 후 다시 적용하세요.");
-        if (c.sourceHash !== sourceHash(p))
+        if (c.sourceHash !== articleHash(p))
           throw conflict(
-            "원문이 바뀌어 이 후보를 적용하지 않았습니다. 현재 원문으로 다시 생성하세요.",
+            "기사 제목·시점·원문이 바뀌어 이 후보를 적용하지 않았습니다. 현재 기사로 다시 생성하세요.",
             "STALE",
+          );
+        // The editor changed this format after the candidate was made: the
+        // newer text is replaced only when the editor confirms it.
+        if (
+          postTextOf(p, c.format) !== c.baseText &&
+          req.body.replaceEdited !== true
+        )
+          throw conflict(
+            "후보를 만든 뒤 글이 수정되었습니다. 수정한 글을 이 후보로 바꿀지 확인하세요.",
+            "EDITED",
           );
         if (c.format === "short" && p.locks.caption)
           throw conflict("짧은 캡션이 잠겨 있습니다. 잠금을 푼 뒤 적용하세요.");
@@ -136,6 +147,30 @@ postTextRouter.post(
       }),
     ),
   ),
+);
+
+// Checks a candidate again (e.g. after its check timed out), never the text.
+postTextRouter.post(
+  "/api/projects/:id/post-text/candidates/:candidateId/verify",
+  wrap(async (req, res) => {
+    const c = await loadCandidate(req.params.candidateId);
+    const p = (await read(req.params.id)).current;
+    if (c.projectId !== p.id)
+      throw conflict("다른 작업의 게시글 후보입니다.", "STALE");
+    if (c.sourceHash !== articleHash(p))
+      throw conflict(
+        "기사 제목·시점·원문이 바뀌었습니다. 현재 기사로 다시 생성하세요.",
+        "STALE",
+      );
+    assertSummarizable(p);
+    const next = {
+      ...c,
+      review: await verifyPost(p, c.format, c.text),
+      reviewError: null,
+    };
+    await saveCandidate(next);
+    res.json(next);
+  }),
 );
 
 // "검증만 다시": check the saved text of one format again, without generating.

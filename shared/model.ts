@@ -203,9 +203,9 @@ export function mergeCopy(p: Project, next: Copy, scope: string) {
     "caption",
     "alt",
   ] as const) {
-    // A full generation fills only an empty caption; post texts are written
-    // in the post step and never replaced by card generation.
-    if (key === "caption" && scope === "all" && p.copy.caption.trim()) continue;
+    // Post texts, the caption included, are written only in the post step
+    // (with its source check and limits); card generation never touches them.
+    if (key === "caption" && scope === "all") continue;
     if ((scope === "all" || scope === key) && !p.locks[key]) {
       (c as any)[key] = next[key];
       if (key === "headline") {

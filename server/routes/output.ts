@@ -7,7 +7,12 @@ import { read, save, mutate, root } from "../store";
 import { render } from "../render";
 import { wrap } from "../http";
 import { isAiBackground } from "../../shared/ai-background";
-import { cardAlt, cardKind, type Project } from "../../shared/model";
+import {
+  cardAlt,
+  cardKind,
+  profileOnlyChange,
+  type Project,
+} from "../../shared/model";
 import {
   exportCaption,
   reviewState,
@@ -63,7 +68,11 @@ outputRouter.post(
     res.json(
       await mutate(async () => {
         const current = (await read(p.id)).current;
-        if (current.revision !== p.revision)
+        // Saves made during the render that change only post texts or
+        // display settings keep the images; any card change rejects them.
+        // The images are merged into the latest project, so a post text saved
+        // meanwhile is kept.
+        if (current.revision !== p.revision && !profileOnlyChange(p, current))
           throw Object.assign(
             new Error("렌더 중 변경되어 이전 이미지는 적용하지 않았습니다."),
             { status: 409, code: "STALE" },
@@ -71,15 +80,16 @@ outputRouter.post(
         const complete = only === undefined;
         return save(
           {
-            ...p,
+            ...current,
             renders: rendered.images,
             coverLayout: rendered.coverLayout,
-            renderRevision: complete ? p.revision + 1 : 0,
-            coverRenderRevision: complete || only === 0 ? p.revision + 1 : 0,
+            renderRevision: complete ? current.revision + 1 : 0,
+            coverRenderRevision:
+              complete || only === 0 ? current.revision + 1 : 0,
             status: complete ? "rendered" : "edited",
             imageApproved: false,
           },
-          p.revision,
+          current.revision,
           "이미지 렌더",
         );
       }),

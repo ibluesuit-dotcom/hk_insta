@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { test, expect } from "./auth-fixture";
 import yauzl from "yauzl";
@@ -200,6 +201,44 @@ test("candidate rules: project, revision, source, lock, failed check, one articl
   p = await adopted.json();
   expect(p.postText.summary.review.overall).toBe("needs_review");
 
+  // A candidate made before the format was edited replaces the edit only
+  // when confirmed; a changed publication time makes it stale.
+  await put((p) => {
+    p.source = source;
+    p.postText = {
+      selected: "short",
+      summary: { text: "직접 쓴 요약", provenance: "manual", sourceHash: null },
+    };
+  });
+  const before = await candidate("summary");
+  await put((p) => (p.postText.summary.text = "그 뒤 고친 요약"));
+  expect((await (await apply(before.id)).json()).code).toBe("EDITED");
+  const replaced = await apply(before.id, p.id, { replaceEdited: true });
+  expect(replaced.ok(), await replaced.text()).toBe(true);
+  p = await replaced.json();
+  const dated = await candidate("summary");
+  await put((p) => (p.publishedAt = "2026-09-01"));
+  expect((await (await apply(dated.id)).json()).code).toBe("STALE");
+
+  // A candidate can be checked again without generating.
+  const recheck = await candidate("short");
+  const checked = await request.post(
+    `/api/projects/${p.id}/post-text/candidates/${recheck.id}/verify`,
+  );
+  expect(checked.ok(), await checked.text()).toBe(true);
+  expect((await checked.json()).review.overall).toBe("pass");
+
+  // A loaded URL article plus one attachment is two articles.
+  await put((p) => {
+    p.sourceUrl = "https://example.com/a";
+    p.attachments = [{ name: "b.txt", text: "둘째 기사" }];
+  });
+  const mixed = await request.post(
+    `/api/projects/${p.id}/post-text/candidates`,
+    { data: { revision: p.revision, format: "summary" } },
+  );
+  expect((await mixed.json()).message).toContain("한 기사");
+
   // Two combined articles are not summarized.
   await put((p) => {
     p.attachments = [
@@ -211,4 +250,60 @@ test("candidate rules: project, revision, source, lock, failed check, one articl
     data: { revision: p.revision, format: "summary" },
   });
   expect((await two.json()).message).toContain("한 기사");
+});
+
+test("a post text saved while cards render keeps both the images and the text", async ({
+  request,
+}) => {
+  const first = await (await request.post("/api/projects")).json();
+  const upload = await request.post("/api/photos", {
+    multipart: {
+      file: {
+        name: "p.jpg",
+        mimeType: "image/jpeg",
+        buffer: readFileSync(photo),
+      },
+    },
+  });
+  let p = {
+    ...first,
+    source,
+    photo: (await upload.json()).url,
+    copy: {
+      ...first.copy,
+      headline: "지난달 수출 10% 증가",
+      pages: [{ ...first.copy.pages[0], title: "제목", body: "본문" }],
+    },
+  };
+  p = await (await request.put(`/api/projects/${p.id}`, { data: p })).json();
+  const rendering = request.post(`/api/projects/${p.id}/render`, {
+    data: { revision: p.revision },
+  });
+  await new Promise((r) => setTimeout(r, 150));
+  const saved = await request.put(`/api/projects/${p.id}`, {
+    data: { ...p, copy: { ...p.copy, caption: "렌더 중 쓴 캡션" } },
+  });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  const rendered = await rendering;
+  expect(rendered.ok(), await rendered.text()).toBe(true);
+  const done = await rendered.json();
+  expect(done.copy.caption).toBe("렌더 중 쓴 캡션");
+  expect(done.renderRevision).toBe(done.revision);
+  expect(done.renders.every(Boolean)).toBe(true);
+
+  // A card change during the render still rejects the images.
+  const again = request.post(`/api/projects/${p.id}/render`, {
+    data: { revision: done.revision },
+  });
+  await new Promise((r) => setTimeout(r, 150));
+  await request.put(`/api/projects/${p.id}`, {
+    data: {
+      ...done,
+      copy: {
+        ...done.copy,
+        pages: [{ ...done.copy.pages[0], body: "바뀐 본문" }],
+      },
+    },
+  });
+  expect((await (await again).json()).code).toBe("STALE");
 });

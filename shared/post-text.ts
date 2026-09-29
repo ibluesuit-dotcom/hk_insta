@@ -84,8 +84,34 @@ type PostProject = {
   copy: { caption: string };
   source: string;
   sourceTitle: string;
+  sourceSubtitle?: string;
+  publishedAt?: string;
+  sourceUrl?: string;
+  attachments?: { text: string; error?: string }[];
   postText?: PostText;
 };
+/**
+ * Everything a post text is generated and checked against. A review or a
+ * candidate counts only while this is unchanged (a corrected publication
+ * time can turn "내년" into another year).
+ */
+export const articleHash = (
+  p: Pick<PostProject, "source" | "sourceTitle" | "sourceSubtitle" | "publishedAt">,
+) =>
+  sha256Hex(
+    JSON.stringify([
+      p.sourceTitle.trim(),
+      (p.sourceSubtitle ?? "").trim(),
+      (p.publishedAt ?? "").trim(),
+      p.source.trim(),
+    ]),
+  );
+/** Documents combined in the source: the loaded URL article and attachments. */
+export const sourceDocumentCount = (p: PostProject) =>
+  (p.sourceUrl?.trim() ? 1 : 0) +
+  (p.attachments ?? []).filter((a) => !a.error && a.text.trim()).length;
+export const ONE_ARTICLE_MESSAGE =
+  "요약·풀 기사는 한 기사만 지원합니다. 요약할 기사 하나만 원문에 남겨 주세요.";
 export const selectedFormat = (p: PostProject): PostFormat =>
   p.postText?.selected ?? "short";
 export function postTextOf(p: PostProject, format: PostFormat) {
@@ -110,7 +136,7 @@ export function reviewState(p: PostProject, format: PostFormat): ReviewState {
   const review = reviewOf(p, format);
   if (!review || review.textHash !== textHash(postTextOf(p, format)))
     return "unchecked";
-  if (review.sourceHash !== sourceHash(p)) return "stale_source";
+  if (review.sourceHash !== articleHash(p)) return "stale_source";
   return review.overall;
 }
 export const REVIEW_NAMES: Record<ReviewState, string> = {

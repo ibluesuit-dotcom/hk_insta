@@ -1,5 +1,6 @@
 import { sourceHash } from "../../shared/ai-background";
 import {
+  ONE_ARTICLE_MESSAGE,
   POST_FORMATS,
   POST_FORMAT_HELP,
   POST_FORMAT_NAMES,
@@ -9,6 +10,7 @@ import {
   reviewOf,
   reviewState,
   selectedFormat,
+  sourceDocumentCount,
   type PostFormat,
   type PostOptions,
 } from "../../shared/post-text";
@@ -28,6 +30,7 @@ export function PostTextPanel({ s }: { s: Studio }) {
   const length = measure(text);
   const locked = view === "short" && !!p.locks.caption;
   const variant = view === "short" ? undefined : p.postText?.[view];
+  const manyDocuments = sourceDocumentCount(p) > 1;
   const sourceChanged =
     view === "full" &&
     variant?.provenance === "source_copy" &&
@@ -94,11 +97,14 @@ export function PostTextPanel({ s }: { s: Studio }) {
           원문이 바뀌었습니다. 필요하면 ‘원문 불러오기’로 다시 가져오세요.
         </p>
       )}
+      {manyDocuments && view !== "short" && (
+        <p className="warn">{ONE_ARTICLE_MESSAGE}</p>
+      )}
       <ReviewLine s={s} format={view} />
       <div className="row post-actions">
         {view === "full" ? (
           <button
-            disabled={!!busy || !p.source.trim()}
+            disabled={!!busy || !p.source.trim() || manyDocuments}
             onClick={() => {
               if (
                 !text.trim() ||
@@ -276,7 +282,7 @@ function ReviewLine({ s, format }: { s: Studio; format: PostFormat }) {
 
 function CandidateBox({ s, format }: { s: Studio; format: GenFormat }) {
   const job = s.postJobs[format];
-  if (!job || job.status === "generating") return null;
+  if (!job || (job.status === "generating" && !job.candidate)) return null;
   if (job.status === "failed")
     return (
       <div className="post-candidate failed" role="alert">
@@ -323,10 +329,29 @@ function CandidateBox({ s, format }: { s: Studio; format: GenFormat }) {
         <button
           className="primary tiny"
           disabled={!!s.busy}
-          onClick={() => s.applyPostCandidate(format, failed)}
+          onClick={() => {
+            // The text was edited after this candidate was made.
+            const edited = !!s.p && postTextOf(s.p, format) !== c.baseText;
+            if (
+              edited &&
+              !window.confirm(
+                "후보를 만든 뒤 글을 수정했습니다. 수정한 글을 이 후보로 바꿀까요? 이전 글은 버전 기록에 남습니다.",
+              )
+            )
+              return;
+            s.applyPostCandidate(format, failed, edited);
+          }}
         >
           {failed ? "검토 필요로 적용" : "이 후보 적용"}
         </button>
+        {(!c.review || failed) && (
+          <button
+            className="tiny"
+            onClick={() => s.reverifyPostCandidate(format)}
+          >
+            원문 대조 다시
+          </button>
+        )}
         <button className="tiny" onClick={() => s.discardPostCandidate(format)}>
           버리기
         </button>
