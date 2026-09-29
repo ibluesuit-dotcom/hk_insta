@@ -1,10 +1,21 @@
 import express from "express";
-import { blank, profileOnlyChange } from "../../shared/model";
+import {
+  blank,
+  isPhotoPage,
+  profileOnlyChange,
+  type Project,
+} from "../../shared/model";
 import { list, read, save, mutate } from "../store";
 import { wrap, validateProject } from "../http";
 import { aiAssetIdOf, backgroundFromSidecar } from "../../shared/ai-background";
 import { assetUsableBy, foreignAsset, loadSidecar } from "../ai-background";
 
+const cardLayout = (p: Project) =>
+  JSON.stringify(
+    p.copy.pages.map((pg) =>
+      isPhotoPage(pg) ? ["photo", pg.photoCard?.photo] : ["text"],
+    ),
+  );
 // Project CRUD and version history.
 export const projectsRouter = express.Router();
 projectsRouter.get(
@@ -59,7 +70,12 @@ projectsRouter.put(
           background,
           id: old.id,
           versions: old.versions,
-          renders: old.renders,
+          // Old images must not show under another card: when cards are
+          // added, removed or change kind or photo, only the cover image stays.
+          renders:
+            cardLayout(old) === cardLayout(input)
+              ? old.renders
+              : old.renders.slice(0, 1),
           coverLayout: old.coverLayout,
           coverRenderRevision:
             displayOnly && old.coverRenderRevision === old.revision

@@ -17,7 +17,6 @@ import {
   Drafts,
   applyDrafts,
   draftItem,
-  removePageDrafts,
   reorderDrafts,
 } from "../../shared/editor-drafts";
 import { api } from "../api";
@@ -641,10 +640,13 @@ export function useStudio() {
                 (k) => payload.scope + ":" + k,
               )
             : payload.scope === "pages"
-              ? result.copy.pages.flatMap((_: unknown, i: number) =>
-                  ["role", "title", "body", "highlight", "alt"].map(
-                    (k) => `page:${i}:${k}`,
-                  ),
+              ? result.copy.pages.flatMap(
+                  (page: Project["copy"]["pages"][number], i: number) =>
+                    isPhotoPage(page)
+                      ? []
+                      : ["role", "title", "body", "highlight", "alt"].map(
+                          (k) => `page:${i}:${k}`,
+                        ),
                 )
               : [payload.scope];
           const next = { ...draftsRef.current };
@@ -811,45 +813,56 @@ export function useStudio() {
     ...kept,
     photo,
   });
+  /**
+   * A structural card change (kind, photo, add, delete). Card text drafts are
+   * saved first so no hidden draft is left behind a photo; the change is sent
+   * as one save and shown only once the server has accepted it. On failure the
+   * editor keeps showing the saved cards.
+   */
+  async function saveCardChange(
+    label: string,
+    upload: File | undefined,
+    change: (p: Project, photo: string) => void,
+    check: (p: Project) => void = () => {},
+  ) {
+    return run(label, async () => {
+      check(ref.current!);
+      const photo = upload ? await uploadPhoto(upload) : "";
+      const current = await saveDrafts();
+      check(current);
+      const next = structuredClone(current);
+      change(next, photo);
+      accept(await api("/projects/" + next.id, "PUT", next));
+    });
+  }
+  const photoRoom = (p: Project) => {
+    if (photoPageCount(p) >= PHOTO_CARD_LIMIT) throw photoLimitError();
+  };
   /** Text card i → photo card, with a new file or the photo kept from before. */
-  async function toPhotoCard(i: number, file?: File) {
+  function toPhotoCard(i: number, file?: File) {
     const kept = ref.current?.copy.pages[i]?.photoCard;
     if (!file && !kept) return;
-    await run("사진 카드로 바꾸는 중", async () => {
-      if (photoPageCount(ref.current!) >= PHOTO_CARD_LIMIT)
-        throw photoLimitError();
-      const photo = file ? await uploadPhoto(file) : kept!.photo;
-      await flush();
-      edit((p) => {
+    return saveCardChange(
+      "사진 카드로 바꾸는 중",
+      file,
+      (p, photo) => {
         const page = p.copy.pages[i];
         page.kind = "photo";
-        page.photoCard = newPhotoCard(photo, page.photoCard);
-        return p;
-      }, true);
-      await flush();
-    });
+        page.photoCard = newPhotoCard(photo || kept!.photo, page.photoCard);
+      },
+      photoRoom,
+    );
   }
   /** Photo card i → text card. Its text and photo settings both stay stored. */
-  async function toTextCard(i: number) {
-    await run("텍스트 카드로 바꾸는 중", async () => {
-      await flush();
-      edit((p) => {
-        p.copy.pages[i].kind = "text";
-        return p;
-      }, true);
-      await flush();
+  function toTextCard(i: number) {
+    return saveCardChange("텍스트 카드로 바꾸는 중", undefined, (p) => {
+      p.copy.pages[i].kind = "text";
     });
   }
-  async function replaceCardPhoto(i: number, file: File) {
-    await run("사진 교체 중", async () => {
-      const photo = await uploadPhoto(file);
-      await flush();
-      edit((p) => {
-        const page = p.copy.pages[i];
-        page.photoCard = newPhotoCard(photo, page.photoCard);
-        return p;
-      }, true);
-      await flush();
+  function replaceCardPhoto(i: number, file: File) {
+    return saveCardChange("사진 교체 중", file, (p, photo) => {
+      const page = p.copy.pages[i];
+      page.photoCard = newPhotoCard(photo, page.photoCard);
     });
   }
   function photoCardField(i: number, patch: Partial<PhotoCard>) {
@@ -861,35 +874,29 @@ export function useStudio() {
   }
   /** Appends a text card, or a photo card once its upload succeeds. */
   async function addCard(file?: File) {
-    await run(file ? "사진 카드 추가 중" : "카드 추가 중", async () => {
-      const current = ref.current!;
-      if (current.count >= 8)
-        throw new Error("카드는 표지 외 최대 8장입니다.");
-      if (file && photoPageCount(current) >= PHOTO_CARD_LIMIT)
-        throw photoLimitError();
-      const photo = file ? await uploadPhoto(file) : "";
-      await flush();
-      edit((p) => {
+    const ok = await saveCardChange(
+      file ? "사진 카드 추가 중" : "카드 추가 중",
+      file,
+      (p, photo) => {
         p.copy.pages.push(
           file
             ? { ...emptyPage(), kind: "photo", photoCard: newPhotoCard(photo) }
             : emptyPage(),
         );
         p.count++;
-        return p;
-      }, true);
-      await flush();
-      setIndex(ref.current!.count);
-    });
+      },
+      (p) => {
+        if (p.count >= 8) throw new Error("카드는 표지 외 최대 8장입니다.");
+        if (file) photoRoom(p);
+      },
+    );
+    if (ok) setIndex(ref.current!.count);
   }
   async function deleteCard(i: number) {
-    await run("카드 삭제 중", async () => {
-      await flush();
-      edit((p) => removePage(p, i), true);
-      persistDrafts(removePageDrafts(draftsRef.current, i));
-      await flush();
-      setIndex(Math.min(i + 1, ref.current!.count));
+    const ok = await saveCardChange("카드 삭제 중", undefined, (p) => {
+      removePage(p, i);
     });
+    if (ok) setIndex(Math.min(i + 1, ref.current!.count));
   }
   async function files(files: FileList | null) {
     if (!files) return;

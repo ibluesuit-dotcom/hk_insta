@@ -123,6 +123,36 @@ test("mixed text/photo cards: AI writes text cards only, render and ZIP follow k
     kind: "photo",
   });
 
+  // Changing a card's kind or photo drops the old images, except the cover.
+  const before = p.renders[0];
+  await put((p) => {
+    p.copy.pages[2].kind = "photo";
+    p.copy.pages[2].photoCard = { ...p.copy.pages[1].photoCard };
+  });
+  expect(p.renders).toEqual([before]);
+  await put((p) => {
+    p.copy.pages[2].kind = "text";
+  });
+
+  // A long unbroken string wraps inside the card instead of being cut
+  // sideways; wide text that needs a fourth line is reported.
+  await put((p) => {
+    p.copy.pages[1].photoCard.text = "https://example.com/" + "a".repeat(80);
+  });
+  const wrapped = await request.post(`/api/projects/${p.id}/render`, {
+    data: { revision: p.revision, only: 2 },
+  });
+  expect(wrapped.ok(), await wrapped.text()).toBe(true);
+  p = await wrapped.json();
+  await put((p) => {
+    p.copy.pages[1].photoCard.text = "Ｗ".repeat(100);
+  });
+  const wide = await request.post(`/api/projects/${p.id}/render`, {
+    data: { revision: p.revision, only: 2 },
+  });
+  expect(wide.ok()).toBe(false);
+  expect((await wide.json()).message).toContain("3줄");
+
   // A photo caption over 3 lines is reported, never cut.
   await put((p) => {
     p.copy.pages[1].photoCard.text = "가\n나\n다\n라";

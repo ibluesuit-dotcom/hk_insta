@@ -45,7 +45,11 @@ export function applyDrafts(p: Project, drafts: Drafts): Project {
   for (const [key, patch] of Object.entries(drafts)) {
     if (!patch || typeof patch !== "object") continue;
     // Drafts saved before layout metadata existed used manual slash breaks.
-    if (key === "headline" && "copy.headline" in patch && !("copy.headlineMode" in patch))
+    if (
+      key === "headline" &&
+      "copy.headline" in patch &&
+      !("copy.headlineMode" in patch)
+    )
       next.copy.headlineMode = "manual";
     for (const path of itemPaths(key)) {
       if (!(path in patch)) continue;
@@ -72,30 +76,6 @@ export function reorderDrafts(
       );
     next[swap(key)] = Object.fromEntries(
       Object.entries(patch).map(([path, value]) => [swap(path), value]),
-    );
-  }
-  return next;
-}
-/** Drafts after removing following card `removed`: its drafts go, later shift down. */
-export function removePageDrafts(drafts: Drafts, removed: number): Drafts {
-  const next: Drafts = {};
-  for (const [key, patch] of Object.entries(drafts)) {
-    const m = /^page:(\d+):/.exec(key);
-    if (!m) {
-      next[key] = patch;
-      continue;
-    }
-    const n = Number(m[1]);
-    if (n === removed) continue;
-    const shift = (s: string) =>
-      n < removed
-        ? s
-        : s.replace(
-            /^(page:|copy\.pages\.)(\d+)([:.])/,
-            (_, prefix, i, suffix) => `${prefix}${Number(i) - 1}${suffix}`,
-          );
-    next[shift(key)] = Object.fromEntries(
-      Object.entries(patch).map(([path, value]) => [shift(path), value]),
     );
   }
   return next;

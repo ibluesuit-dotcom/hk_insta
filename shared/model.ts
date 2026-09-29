@@ -345,7 +345,8 @@ export const projectSchema = z
     versions: z
       .object({ template: draftText, prompt: draftText, font: draftText })
       .strict(),
-    renders: z.array(z.string().regex(/^\/renders\/[\w.-]+\.png$/)).max(9),
+    // "" is a card not rendered yet; renderFresh() requires every slot.
+    renders: z.array(z.string().regex(/^(|\/renders\/[\w.-]+\.png)$/)).max(9),
     renderRevision: z.number().int().nonnegative(),
     copyApproved: z.boolean(),
     imageApproved: z.boolean(),

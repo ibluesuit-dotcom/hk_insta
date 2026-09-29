@@ -89,3 +89,55 @@ test("text → photo → text round trip, add, limit, delete and AI keep photo c
   expect(rendered.renders).toHaveLength(5);
   expect(rendered.renderRevision).toBe(rendered.revision);
 });
+
+test("converting saves the card's text drafts first; a failed save changes nothing", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("원문 제목", { exact: true }).fill("금리와 수출 동향");
+  await page.getByLabel("통합 원문").fill(source);
+  await page.getByLabel("표지 사진 첨부").setInputFiles(photo);
+  const generated = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await page.getByRole("button", { name: "생성", exact: true }).click();
+  const first = await (await generated).json();
+  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "본문 1", exact: true }).click();
+  await page.getByLabel("페이지 제목", { exact: true }).fill("직접 고친 제목");
+
+  // The card's save fails: it stays a text card with the draft kept.
+  await page.route(`**/api/projects/${first.id}`, (route) =>
+    route.request().method() === "PUT" &&
+    route.request().postDataJSON().copy.pages[0].kind === "photo"
+      ? route.fulfill({ status: 500, json: { message: "저장 실패" } })
+      : route.continue(),
+  );
+  await page.getByLabel("사진 카드로 바꾸기").setInputFiles(photo);
+  await expect(page.getByRole("alert")).toContainText("저장 실패");
+  await expect(
+    page.getByRole("button", { name: "본문 1", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("페이지 제목", { exact: true })).toHaveValue(
+    "직접 고친 제목",
+  );
+  await page.unroute(`**/api/projects/${first.id}`);
+
+  await page.getByLabel("사진 카드로 바꾸기").setInputFiles(photo);
+  await expect(
+    page.getByRole("button", { name: "사진 1", exact: true }),
+  ).toBeVisible();
+  const saved = await project(page, first.id);
+  expect(saved.copy.pages[0]).toMatchObject({
+    kind: "photo",
+    title: "직접 고친 제목",
+  });
+  expect(
+    await page.evaluate(
+      (id) => localStorage.getItem("editor-drafts:" + id),
+      first.id,
+    ),
+  ).toBe("{}");
+  await page.getByRole("button", { name: "텍스트 카드로 되돌리기" }).click();
+  await expect(page.getByLabel("페이지 제목", { exact: true })).toHaveValue(
+    "직접 고친 제목",
+  );
+});
