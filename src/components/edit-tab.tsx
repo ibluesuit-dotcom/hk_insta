@@ -1,4 +1,11 @@
-import { headlineLayout, headlineEditorText } from "../../shared/model";
+import {
+  PHOTO_CARD_LIMIT,
+  PHOTO_TEXT_LIMIT,
+  headlineLayout,
+  headlineEditorText,
+  isPhotoPage,
+  photoPageCount,
+} from "../../shared/model";
 import { Studio } from "../hooks/use-studio";
 import { AiBackgroundPicker } from "./ai-background";
 import { CoverPhotoUpload, Evidence, LockButton, RegenButton } from "./fields";
@@ -24,7 +31,11 @@ export function EditTab({ s }: { s: Studio }) {
             className={index === i ? "selected" : ""}
             onClick={() => setIndex(i)}
           >
-            {i === 0 ? "표지" : `본문 ${i}`}
+            {i === 0
+              ? "표지"
+              : isPhotoPage(p.copy.pages[i - 1])
+                ? `사진 ${i}`
+                : `본문 ${i}`}
           </button>
         ))}
       </div>
@@ -36,7 +47,7 @@ export function EditTab({ s }: { s: Studio }) {
               reorder(index - 1, index - 2);
             }}
           >
-            ← 본문 앞으로
+            ← 카드 앞으로
           </button>
           <button
             disabled={index === p.count}
@@ -44,7 +55,7 @@ export function EditTab({ s }: { s: Studio }) {
               reorder(index - 1, index);
             }}
           >
-            본문 뒤로 →
+            카드 뒤로 →
           </button>
         </div>
       )}
@@ -63,8 +74,281 @@ export function EditTab({ s }: { s: Studio }) {
           </p>
         </div>
       </details>
-      {index === 0 ? <CoverFields s={s} /> : <PageFields s={s} />}
+      {index === 0 ? (
+        <CoverFields s={s} />
+      ) : currentPage && isPhotoPage(currentPage) ? (
+        <PhotoCardFields s={s} />
+      ) : (
+        <PageFields s={s} />
+      )}
+      {index > 0 && <CardActions s={s} />}
+      <AddCard s={s} />
     </>
+  );
+}
+
+/** A hidden file input behind a button-like label; the pick is reset after. */
+function FilePick({
+  label,
+  disabled,
+  onFile,
+  className = "tiny",
+}: {
+  label: string;
+  disabled?: boolean;
+  onFile: (file: File) => void;
+  className?: string;
+}) {
+  return (
+    <label className={`file-pick ${className} ${disabled ? "disabled" : ""}`}>
+      {label}
+      <input
+        type="file"
+        aria-label={label}
+        accept="image/jpeg,image/png,image/webp"
+        disabled={disabled}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) onFile(file);
+        }}
+      />
+    </label>
+  );
+}
+
+/** Kind switch and delete for the selected following card. */
+function CardActions({ s }: { s: Studio }) {
+  const { p, index, busy } = s;
+  const page = p?.copy.pages[index - 1];
+  if (!p || !page) return null;
+  const i = index - 1;
+  const photoFull = !isPhotoPage(page) && photoPageCount(p) >= PHOTO_CARD_LIMIT;
+  return (
+    <div className="card-actions">
+      {isPhotoPage(page) ? (
+        <button
+          className="tiny"
+          disabled={!!busy}
+          onClick={() => s.toTextCard(i)}
+        >
+          {page.title || page.body
+            ? "텍스트 카드로 되돌리기"
+            : "텍스트 카드로 바꾸기"}
+        </button>
+      ) : (
+        <>
+          <FilePick
+            label="사진 카드로 바꾸기"
+            disabled={!!busy || photoFull}
+            onFile={(file) => s.toPhotoCard(i, file)}
+          />
+          {page.photoCard && (
+            <button
+              className="tiny"
+              disabled={!!busy || photoFull}
+              onClick={() => s.toPhotoCard(i)}
+            >
+              보관된 사진으로 바꾸기
+            </button>
+          )}
+        </>
+      )}
+      <button
+        className="tiny"
+        disabled={!!busy || p.count <= 1}
+        onClick={() => {
+          if (
+            window.confirm(
+              `카드 ${index + 1}을(를) 삭제할까요? 이 카드에 보관된 요약과 사진 설정도 현재 작업에서 함께 제거됩니다. 이전 버전에서 복원할 수 있습니다.`,
+            )
+          )
+            s.deleteCard(i);
+        }}
+      >
+        이 카드 삭제
+      </button>
+      {photoFull && (
+        <small className="hint">
+          사진 카드는 표지 외 최대 {PHOTO_CARD_LIMIT}장입니다.
+        </small>
+      )}
+    </div>
+  );
+}
+
+/** ＋ 카드 추가: a text card, or a photo card after its upload succeeds. */
+function AddCard({ s }: { s: Studio }) {
+  const { p, busy } = s;
+  if (!p) return null;
+  const full = p.count >= 8;
+  const photoFull = photoPageCount(p) >= PHOTO_CARD_LIMIT;
+  return (
+    <div className="add-card">
+      <strong>＋ 카드 추가</strong>
+      <FilePick
+        label="사진 카드 추가"
+        disabled={!!busy || full || photoFull}
+        onFile={(file) => s.addCard(file)}
+      />
+      <button
+        className="tiny"
+        disabled={!!busy || full}
+        onClick={() => s.addCard()}
+      >
+        텍스트 카드 추가
+      </button>
+      <small className="hint">
+        전체 {p.count + 1}장 · 사진 {photoPageCount(p) + 1}/
+        {PHOTO_CARD_LIMIT + 1}
+        장(표지 포함)
+        {full
+          ? " · 카드는 표지 외 최대 8장입니다."
+          : photoFull
+            ? ` · 사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다.`
+            : ""}
+      </small>
+    </div>
+  );
+}
+
+/** A following photo card: photo, fit, optional caption, credit and alt. */
+function PhotoCardFields({ s }: { s: Studio }) {
+  const { p, index, busy } = s;
+  const card = p?.copy.pages[index - 1]?.photoCard;
+  if (!p || !card) return null;
+  const i = index - 1;
+  const field = (patch: Parameters<Studio["photoCardField"]>[1]) =>
+    s.photoCardField(i, patch);
+  const showText = card.textVisible || !!card.text;
+  const page = p.copy.pages[i];
+  return (
+    <div className="photo-card-fields">
+      {!!(page.title || page.body) && (
+        <p className="hint">
+          원래 요약은 보관되었습니다. ‘텍스트 카드로 되돌리기’로 복구합니다.
+        </p>
+      )}
+      <div
+        className={"card-photo " + card.fit}
+        onPointerDown={(e) => {
+          if (card.fit !== "cover") return;
+          const r = e.currentTarget.getBoundingClientRect();
+          field({
+            focal: {
+              ...card.focal,
+              x: Math.round(((e.clientX - r.left) / r.width) * 100),
+              y: Math.round(((e.clientY - r.top) / r.height) * 100),
+            },
+          });
+        }}
+      >
+        <img
+          src={card.photo}
+          alt={card.alt || `카드 ${index + 1} 사진`}
+          style={
+            card.fit === "cover"
+              ? {
+                  objectPosition: `${card.focal.x}% ${card.focal.y}%`,
+                  transform: `scale(${card.focal.zoom})`,
+                  transformOrigin: `${card.focal.x}% ${card.focal.y}%`,
+                }
+              : undefined
+          }
+        />
+      </div>
+      <div className="row">
+        <FilePick
+          label="사진 교체"
+          disabled={!!busy}
+          onFile={(file) => s.replaceCardPhoto(i, file)}
+        />
+        <div className="segmented" role="group" aria-label="사진 맞춤">
+          {(
+            [
+              ["contain", "전체보기"],
+              ["cover", "화면 채우기"],
+            ] as const
+          ).map(([fit, label]) => (
+            <button
+              key={fit}
+              className={card.fit === fit ? "selected" : ""}
+              onClick={() => field({ fit })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {card.fit === "cover" &&
+        (["x", "y", "zoom"] as const).map((k) => (
+          <label className="slider" key={k}>
+            {k === "x" ? "가로 초점" : k === "y" ? "세로 초점" : "확대"}
+            <input
+              type="range"
+              min={k === "zoom" ? 1 : 0}
+              max={k === "zoom" ? 3 : 100}
+              step={k === "zoom" ? 0.05 : 1}
+              value={card.focal[k]}
+              onChange={(e) =>
+                field({ focal: { ...card.focal, [k]: Number(e.target.value) } })
+              }
+            />
+            <span>
+              {card.focal[k]}
+              {k === "zoom" ? "×" : "%"}
+            </span>
+          </label>
+        ))}
+      {showText ? (
+        <>
+          <label>
+            사진 문구{" "}
+            <span
+              className={[...card.text].length > PHOTO_TEXT_LIMIT ? "warn" : ""}
+            >
+              {[...card.text].length} / {PHOTO_TEXT_LIMIT}자 · 최대 3줄
+            </span>
+          </label>
+          <textarea
+            aria-label="사진 문구"
+            value={card.text}
+            maxLength={PHOTO_TEXT_LIMIT}
+            onChange={(e) => field({ text: e.target.value })}
+          />
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={!card.textVisible}
+              onChange={(e) => field({ textVisible: !e.target.checked })}
+            />
+            문구 숨기기{" "}
+            <small>(내용은 보관되고 이미지에만 나오지 않습니다)</small>
+          </label>
+        </>
+      ) : (
+        <button className="tiny" onClick={() => field({ textVisible: true })}>
+          ＋ 문구 추가
+        </button>
+      )}
+      <details className="photo-meta">
+        <summary>사진 출처·설명</summary>
+        <label>사진 출처</label>
+        <input
+          aria-label="사진 출처"
+          value={card.credit}
+          maxLength={100}
+          onChange={(e) => field({ credit: e.target.value })}
+        />
+        <label>사진 대체 텍스트</label>
+        <textarea
+          aria-label="사진 대체 텍스트"
+          value={card.alt}
+          maxLength={600}
+          onChange={(e) => field({ alt: e.target.value })}
+        />
+      </details>
+    </div>
   );
 }
 

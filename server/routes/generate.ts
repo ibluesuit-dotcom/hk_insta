@@ -1,7 +1,12 @@
 import express from "express";
 import { z } from "zod";
 import { sourceHeadline } from "../../shared/source-title";
-import { mergeCopy } from "../../shared/model";
+import {
+  expandTextCopy,
+  isPhotoPage,
+  mergeCopy,
+  textView,
+} from "../../shared/model";
 import { read, save, mutate } from "../store";
 import { generate } from "../ai";
 import { wrap } from "../http";
@@ -39,11 +44,23 @@ generateRouter.post(
       throw Object.assign(new Error("생성 전에 표지 사진을 첨부하세요."), {
         code: "IMAGE",
       });
+    // Only active text cards are written by AI. Photo cards (and the text
+    // kept behind them) are refused up front or left out of the request.
+    const { view, map } = textView(p);
+    let viewScope = scope;
+    if (scope.startsWith("page:")) {
+      const page = p.copy.pages[Number(scope.slice(5))];
+      if (!page || isPhotoPage(page))
+        throw new Error("사진 카드는 AI로 작성하지 않습니다.");
+      viewScope = "page:" + map.indexOf(Number(scope.slice(5)));
+    }
+    if (scope === "pages" && !map.length)
+      throw new Error("AI로 작성할 텍스트 카드가 없습니다.");
     let result;
     try {
       result = await generate(
-        p,
-        scope,
+        view,
+        viewScope,
         String(req.body.extra || "").slice(0, 2000),
       );
     } catch (e) {
@@ -63,12 +80,16 @@ generateRouter.post(
             ),
             { status: 409, code: "STALE" },
           );
-        if (scope !== "all" && scope !== "keywords")
-          return { ...p, copy: mergeCopy(p, result.copy, scope) };
+        const copy = expandTextCopy(
+          p,
+          mergeCopy(view, result.copy, viewScope),
+          map,
+        );
+        if (scope !== "all" && scope !== "keywords") return { ...p, copy };
         return save(
           {
             ...p,
-            copy: mergeCopy(p, result.copy, scope),
+            copy,
             headlineBreaks: "",
             appliedDirection:
               scope === "all" ? p.direction : p.appliedDirection,

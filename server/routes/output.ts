@@ -7,7 +7,7 @@ import { read, save, mutate, root } from "../store";
 import { render } from "../render";
 import { wrap } from "../http";
 import { isAiBackground } from "../../shared/ai-background";
-import type { Project } from "../../shared/model";
+import { cardAlt, cardKind, type Project } from "../../shared/model";
 
 // AI provenance is recorded only while the AI asset is the shown cover photo.
 export function manifestBackground(p: Project) {
@@ -25,6 +25,14 @@ export function manifestBackground(p: Project) {
   };
 }
 
+// Alt text of the active kind per card: a photo card never shows the text
+// alt kept behind it.
+function altText(p: Project, label: (i: number) => string) {
+  return Array.from(
+    { length: p.count + 1 },
+    (_, i) => `${label(i)}: ${cardAlt(p, i)}`,
+  ).join("\n\n");
+}
 // Rendering, review approval, and export (ZIP, single PNG, text files).
 export const outputRouter = express.Router();
 outputRouter.post(
@@ -127,23 +135,24 @@ outputRouter.get(
       zip.append(
         await fs.readFile(path.join(root, "renders", path.basename(f))),
         {
-          name: `${String(i + 1).padStart(2, "0")}-${i === 0 ? "cover" : "body"}.png`,
+          name: `${String(i + 1).padStart(2, "0")}-${cardKind(p, i)}.png`,
         },
       );
     }
     zip.append(p.copy.caption, { name: "caption.txt" });
-    zip.append(
-      [p.copy.alt, ...p.copy.pages.map((p) => p.alt)]
-        .map((s, i) => `${String(i + 1).padStart(2, "0")}: ${s}`)
-        .join("\n\n"),
-      { name: "alt-text.txt" },
-    );
+    zip.append(altText(p, (i) => String(i + 1).padStart(2, "0")), {
+      name: "alt-text.txt",
+    });
     zip.append(
       JSON.stringify(
         {
           versions: p.versions,
           revision: p.revision,
           order: p.renders.map((_, i) => i + 1),
+          cards: p.renders.map((_, i) => ({
+            order: i + 1,
+            kind: cardKind(p, i),
+          })),
           ...manifestBackground(p),
         },
         null,
@@ -181,9 +190,7 @@ outputRouter.get(
     const text =
       kind === "caption"
         ? p.copy.caption
-        : [p.copy.alt, ...p.copy.pages.map((x) => x.alt)]
-            .map((t, i) => `${i + 1}: ${t}`)
-            .join("\n\n");
+        : altText(p, (i) => String(i + 1));
     res
       .attachment(kind + ".txt")
       .type("text/plain; charset=utf-8")

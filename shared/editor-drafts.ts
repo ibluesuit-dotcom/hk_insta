@@ -76,3 +76,27 @@ export function reorderDrafts(
   }
   return next;
 }
+/** Drafts after removing following card `removed`: its drafts go, later shift down. */
+export function removePageDrafts(drafts: Drafts, removed: number): Drafts {
+  const next: Drafts = {};
+  for (const [key, patch] of Object.entries(drafts)) {
+    const m = /^page:(\d+):/.exec(key);
+    if (!m) {
+      next[key] = patch;
+      continue;
+    }
+    const n = Number(m[1]);
+    if (n === removed) continue;
+    const shift = (s: string) =>
+      n < removed
+        ? s
+        : s.replace(
+            /^(page:|copy\.pages\.)(\d+)([:.])/,
+            (_, prefix, i, suffix) => `${prefix}${Number(i) - 1}${suffix}`,
+          );
+    next[shift(key)] = Object.fromEntries(
+      Object.entries(patch).map(([path, value]) => [shift(path), value]),
+    );
+  }
+  return next;
+}

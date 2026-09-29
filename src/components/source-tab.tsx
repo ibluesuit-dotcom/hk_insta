@@ -259,7 +259,11 @@ export function SourceTab({ s }: { s: Studio }) {
             if (
               count < p.count &&
               !window.confirm(
-                `본문 ${count + 1}~${p.count}장을 삭제할까요? 해당 문안과 잠금이 삭제됩니다. 이전 버전에서 복원할 수 있습니다.`,
+                `카드 ${count + 2}~${p.count + 1}을(를) 삭제할까요? 해당 카드의 문안·사진 설정과 잠금이 삭제됩니다${
+                  p.copy.pages.slice(count).some((pg) => pg.kind === "photo")
+                    ? " (사진 카드 포함)"
+                    : ""
+                }. 이전 버전에서 복원할 수 있습니다.`,
               )
             )
               return;

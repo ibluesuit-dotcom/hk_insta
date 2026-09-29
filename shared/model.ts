@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   backgroundSchema,
+  isAiFamilyPath,
   photoPathAllowed,
   type Background,
 } from "./ai-background";
@@ -41,7 +42,30 @@ export const copySchema = z.object({
   caption: z.string(),
   alt: z.string(),
 });
-export type Copy = z.infer<typeof copySchema>;
+// AI responses use copySchema/pageSchema as they are; photo cards exist only
+// in the stored project, so the AI can never write a card's kind or photo.
+type AiCopy = z.infer<typeof copySchema>;
+/** Following photo cards allowed; with the cover that makes 4 image cards. */
+export const PHOTO_CARD_LIMIT = 3;
+export const PHOTO_TEXT_LIMIT = 100;
+export type PhotoCard = {
+  photo: string;
+  fit: "contain" | "cover";
+  focal: { x: number; y: number; zoom: number };
+  text: string;
+  textVisible: boolean;
+  credit: string;
+  alt: string;
+};
+/**
+ * A following card. Text fields stay in place while the card shows a photo,
+ * and a photoCard stays stored after switching back, so both round-trip.
+ */
+export type Page = AiCopy["pages"][number] & {
+  kind?: "text" | "photo";
+  photoCard?: PhotoCard;
+};
+export type Copy = Omit<AiCopy, "pages"> & { pages: Page[] };
 export interface Project {
   id: string;
   revision: number;
@@ -141,7 +165,7 @@ export function blank(): Project {
     imageApproved: false,
   };
 }
-export function emptyPage() {
+export function emptyPage(): Page {
   return {
     role: "",
     title: "",
@@ -187,10 +211,11 @@ export function mergeCopy(p: Project, next: Copy, scope: string) {
       }
     }
   }
+  // AI pages carry text only; a card's stored kind and photo are kept.
   c.pages = Array.from({ length: p.count }, (_, i) =>
     (scope === "all" || scope === `page:${i}` || scope === "pages") &&
     !p.locks[`page:${i}`]
-      ? next.pages[i]
+      ? { ...c.pages[i], ...next.pages[i] }
       : c.pages[i] || emptyPage(),
   );
   return c;
@@ -198,8 +223,35 @@ export function mergeCopy(p: Project, next: Copy, scope: string) {
 
 // Drafts deliberately allow empty copy while retaining strict field types and bounds.
 const draftText = z.string().max(60000);
+// AI-family aliases are refused so they cannot skip the sidecar and owner checks.
+const uploadPath = z
+  .string()
+  .regex(/^(|\/uploads\/[\w-]+\.jpg)$/)
+  .refine(photoPathAllowed);
+// Following photo cards take plain uploads only, never an AI background.
+const photoCardSchema = z
+  .object({
+    photo: uploadPath.refine((path) => !isAiFamilyPath(path)),
+    fit: z.enum(["contain", "cover"]),
+    focal: z
+      .object({
+        x: z.number().min(0).max(100),
+        y: z.number().min(0).max(100),
+        zoom: z.number().min(1).max(3),
+      })
+      .strict(),
+    text: z.string().max(PHOTO_TEXT_LIMIT),
+    textVisible: z.boolean(),
+    credit: z.string().max(100),
+    alt: z.string().max(600),
+  })
+  .strict();
 const draftPage = pageSchema
-  .extend({ evidence: z.array(z.string().max(60000)).max(100) })
+  .extend({
+    evidence: z.array(z.string().max(60000)).max(100),
+    kind: z.enum(["text", "photo"]).optional(),
+    photoCard: photoCardSchema.optional(),
+  })
   .strict();
 export const draftCopySchema = copySchema
   .extend({
@@ -224,11 +276,6 @@ export const draftCopySchema = copySchema
     alt: draftText,
   })
   .strict();
-// AI-family aliases are refused so they cannot skip the sidecar and owner checks.
-const uploadPath = z
-  .string()
-  .regex(/^(|\/uploads\/[\w-]+\.jpg)$/)
-  .refine(photoPathAllowed);
 export const projectSchema = z
   .object({
     id: z.string().regex(/^[\w-]+$/),
@@ -347,6 +394,17 @@ export const projectSchema = z
         code: "custom",
         message: "본문 장수와 페이지 또는 잠금을 확인하세요.",
       });
+    const photos = p.copy.pages.filter(isPhotoPage);
+    if (photos.some((pg) => !pg.photoCard?.photo))
+      ctx.addIssue({
+        code: "custom",
+        message: "사진 카드에는 사진이 있어야 합니다.",
+      });
+    if (photos.length > PHOTO_CARD_LIMIT)
+      ctx.addIssue({
+        code: "custom",
+        message: `사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다.`,
+      });
   });
 // The post caption is not drawn on any card, so it is left out of the card comparison.
 function withoutCaption(p: Project) {
@@ -392,6 +450,68 @@ function canonical(value: unknown): string {
         )
       : v,
   );
+}
+export const isPhotoPage = (page: Page) => page.kind === "photo";
+export const photoPageCount = (p: Project) =>
+  p.copy.pages.filter(isPhotoPage).length;
+/** File/label kind of output card i: 0 is the cover. */
+export function cardKind(p: Project, i: number): "cover" | "body" | "photo" {
+  if (i === 0) return "cover";
+  return isPhotoPage(p.copy.pages[i - 1]) ? "photo" : "body";
+}
+/** Alt text of output card i, from the active kind only. */
+export function cardAlt(p: Project, i: number) {
+  if (i === 0) return p.copy.alt;
+  const page = p.copy.pages[i - 1];
+  return isPhotoPage(page) ? page.photoCard?.alt || "" : page.alt;
+}
+/**
+ * The project as the AI sees it: only active text cards, with their locks
+ * renumbered. `map[j]` is the real page index of view page j. With no text
+ * card a blank placeholder keeps the cover generation schema valid; its
+ * result is never mapped back.
+ */
+export function textView(p: Project) {
+  const map = p.copy.pages.flatMap((pg, i) => (isPhotoPage(pg) ? [] : [i]));
+  const view = structuredClone(p);
+  view.copy.pages = map.length
+    ? map.map((i) => p.copy.pages[i])
+    : [emptyPage()];
+  view.count = view.copy.pages.length;
+  view.locks = Object.fromEntries(
+    Object.entries(p.locks).flatMap(([k, v]) => {
+      if (!k.startsWith("page:")) return [[k, v]];
+      const j = map.indexOf(Number(k.slice(5)));
+      return j < 0 ? [] : [[`page:${j}`, v]];
+    }),
+  );
+  return { view, map };
+}
+/** Puts a text-view copy back: photo cards and stored card data untouched. */
+export function expandTextCopy(p: Project, viewCopy: Copy, map: number[]) {
+  const copy: Copy = { ...structuredClone(viewCopy), pages: [] };
+  copy.pages = structuredClone(p.copy.pages);
+  map.forEach((real, j) => {
+    copy.pages[real] = { ...copy.pages[real], ...viewCopy.pages[j] };
+  });
+  return copy;
+}
+/** Removes following card i with its lock; later locks shift down. */
+export function removePage(p: Project, i: number) {
+  if (p.count <= 1 || i < 0 || i >= p.count) return p;
+  p.copy.pages.splice(i, 1);
+  const locks: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(p.locks)) {
+    if (!k.startsWith("page:")) locks[k] = v;
+    else {
+      const n = Number(k.slice(5));
+      if (n < i) locks[k] = v;
+      else if (n > i) locks[`page:${n - 1}`] = v;
+    }
+  }
+  p.locks = locks;
+  p.count--;
+  return p;
 }
 export function resizePages(p: Project, count: number) {
   p.copy.pages = Array.from(

@@ -2,15 +2,22 @@ import { useState, useEffect, useRef } from "react";
 import { sourceHeadline } from "../../shared/source-title";
 import { AiVariant, sourceHash } from "../../shared/ai-background";
 import {
+  PHOTO_CARD_LIMIT,
   Project,
+  emptyPage,
+  isPhotoPage,
   movePage,
+  photoPageCount,
   profileOnlyChange,
+  removePage,
   renderFresh,
+  type PhotoCard,
 } from "../../shared/model";
 import {
   Drafts,
   applyDrafts,
   draftItem,
+  removePageDrafts,
   reorderDrafts,
 } from "../../shared/editor-drafts";
 import { api } from "../api";
@@ -220,6 +227,7 @@ export function useStudio() {
       next.status = "edited";
     }
     ref.current = next;
+    setIndex((index) => Math.min(index, next.count));
     editSequence.current++;
     autosavePaused.current = false;
     setP(next);
@@ -782,6 +790,107 @@ export function useStudio() {
       }
     });
   }
+  // Photo cards. A card changes kind only after its photo is uploaded and the
+  // change is saved; a cancelled pick or failed upload leaves it as it was.
+  const photoLimitError = () =>
+    new Error(
+      `사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다. 다른 사진 카드를 텍스트로 되돌리거나 삭제하세요.`,
+    );
+  async function uploadPhoto(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    return (await api("/photos", "POST", form)).url;
+  }
+  const newPhotoCard = (photo: string, kept?: PhotoCard): PhotoCard => ({
+    fit: "contain",
+    focal: { x: 50, y: 50, zoom: 1 },
+    text: "",
+    textVisible: false,
+    credit: "",
+    alt: "",
+    ...kept,
+    photo,
+  });
+  /** Text card i → photo card, with a new file or the photo kept from before. */
+  async function toPhotoCard(i: number, file?: File) {
+    const kept = ref.current?.copy.pages[i]?.photoCard;
+    if (!file && !kept) return;
+    await run("사진 카드로 바꾸는 중", async () => {
+      if (photoPageCount(ref.current!) >= PHOTO_CARD_LIMIT)
+        throw photoLimitError();
+      const photo = file ? await uploadPhoto(file) : kept!.photo;
+      await flush();
+      edit((p) => {
+        const page = p.copy.pages[i];
+        page.kind = "photo";
+        page.photoCard = newPhotoCard(photo, page.photoCard);
+        return p;
+      }, true);
+      await flush();
+    });
+  }
+  /** Photo card i → text card. Its text and photo settings both stay stored. */
+  async function toTextCard(i: number) {
+    await run("텍스트 카드로 바꾸는 중", async () => {
+      await flush();
+      edit((p) => {
+        p.copy.pages[i].kind = "text";
+        return p;
+      }, true);
+      await flush();
+    });
+  }
+  async function replaceCardPhoto(i: number, file: File) {
+    await run("사진 교체 중", async () => {
+      const photo = await uploadPhoto(file);
+      await flush();
+      edit((p) => {
+        const page = p.copy.pages[i];
+        page.photoCard = newPhotoCard(photo, page.photoCard);
+        return p;
+      }, true);
+      await flush();
+    });
+  }
+  function photoCardField(i: number, patch: Partial<PhotoCard>) {
+    edit((p) => {
+      const page = p.copy.pages[i];
+      if (page.photoCard) page.photoCard = { ...page.photoCard, ...patch };
+      return p;
+    });
+  }
+  /** Appends a text card, or a photo card once its upload succeeds. */
+  async function addCard(file?: File) {
+    await run(file ? "사진 카드 추가 중" : "카드 추가 중", async () => {
+      const current = ref.current!;
+      if (current.count >= 8)
+        throw new Error("카드는 표지 외 최대 8장입니다.");
+      if (file && photoPageCount(current) >= PHOTO_CARD_LIMIT)
+        throw photoLimitError();
+      const photo = file ? await uploadPhoto(file) : "";
+      await flush();
+      edit((p) => {
+        p.copy.pages.push(
+          file
+            ? { ...emptyPage(), kind: "photo", photoCard: newPhotoCard(photo) }
+            : emptyPage(),
+        );
+        p.count++;
+        return p;
+      }, true);
+      await flush();
+      setIndex(ref.current!.count);
+    });
+  }
+  async function deleteCard(i: number) {
+    await run("카드 삭제 중", async () => {
+      await flush();
+      edit((p) => removePage(p, i), true);
+      persistDrafts(removePageDrafts(draftsRef.current, i));
+      await flush();
+      setIndex(Math.min(i + 1, ref.current!.count));
+    });
+  }
   async function files(files: FileList | null) {
     if (!files) return;
     await run("파일에서 텍스트 추출 중", async () => {
@@ -860,6 +969,13 @@ export function useStudio() {
     pageField,
     photo,
     files,
+    toPhotoCard,
+    toTextCard,
+    replaceCardPhoto,
+    photoCardField,
+    addCard,
+    deleteCard,
+    isPhotoPage,
     ai,
     generateAi,
     applyAi,

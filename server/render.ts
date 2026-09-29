@@ -3,7 +3,14 @@ import { candidateLines } from "../shared/linebreak";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
-import { Project, headlineLayout, migrateCover } from "../shared/model";
+import {
+  PHOTO_TEXT_LIMIT,
+  Project,
+  headlineLayout,
+  isPhotoPage,
+  migrateCover,
+  type PhotoCard,
+} from "../shared/model";
 import { root } from "./store";
 import { aiLabel, photoPathAllowed } from "../shared/ai-background";
 export const escape = (x: string) =>
@@ -25,10 +32,44 @@ function mark(text: string, highlight: string) {
     escape(text.slice(i + highlight.length))
   );
 }
+// A following photo card: the photo (whole or filling the card), an optional
+// caption strip at the bottom and the credit. No cover or brief decoration.
+function photoCardHtml(card: PhotoCard, image: string) {
+  const cover = card.fit === "cover";
+  const { x, y, zoom } = card.focal;
+  const text = card.textVisible && card.text.trim() ? card.text.trim() : "";
+  return `<img class="pc-photo" src="${image}" style="object-fit:${cover ? "cover" : "contain"};${cover ? `object-position:${x}% ${y}%;transform:scale(${zoom});transform-origin:${x}% ${y}%` : ""}">${text ? `<div class="pc-scrim"></div><p class="pc-text">${escape(text)}</p>` : ""}${card.credit.trim() ? `<span class="pc-credit${text ? "" : " alone"}">${escape(card.credit.trim())}</span>` : ""}`;
+}
 export function html(p: Project, index: number, font: string, image: string) {
   const c = p.copy;
   const pg = c.pages[index - 1];
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>@font-face{font-family:Pretendard;src:url(data:font/woff2;base64,${font});font-weight:45 920;font-display:block}*{box-sizing:border-box}body{margin:0;font-family:Pretendard;color:white}.card{width:1080px;height:1350px;overflow:hidden;position:relative;background:#0B1B2B}.photo{position:absolute;width:100%;height:100%;object-fit:cover;object-position:${p.focal.x}% ${p.focal.y}%;transform:scale(${p.focal.zoom});transform-origin:${p.focal.x}% ${p.focal.y}%}.scrim{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(11,27,43,0) 34%,rgba(11,27,43,.88) 72%,rgba(11,27,43,.97) 100%)}.content{position:absolute;left:64px;right:64px;bottom:64px;display:flex;flex-direction:column;gap:32px}.group{display:flex;flex-direction:column;gap:18px}.kicker{display:inline-block;background:#C8102E;padding:10px 20px;font-size:42px;font-weight:800;letter-spacing:.02em;white-space:nowrap}h1{margin:0;font-size:88px;font-weight:800;line-height:1.14;letter-spacing:-.025em;white-space:pre;word-break:keep-all}.gold{color:#FFC72C}.line{height:2px;background:rgba(255,255,255,.3)}.meta{display:flex;justify-content:space-between;gap:24px;color:rgba(255,255,255,.72);font-size:24px;font-weight:600}.domain{letter-spacing:.06em;white-space:nowrap}.bodycard{padding:80px 64px}.eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#FFC72C}.bodytitle{font-size:48px;line-height:1.25;margin:64px 0 42px;word-break:keep-all;overflow-wrap:normal}.bodytext{font-size:${p.bodyFont}px;line-height:1.45;font-weight:650;white-space:pre-wrap;word-break:keep-all;overflow-wrap:normal;margin:0;max-height:840px}.bodyfooter{position:absolute;bottom:64px;left:64px;right:64px}</style></head><body><article class="card ${index ? "bodycard" : ""}">${index ? `<div class="eyebrow">NEWS BRIEF / ${String(index).padStart(2, "0")}</div><h2 class="bodytitle">${escape(pg.title)}</h2><p class="bodytext">${mark(pg.body, pg.highlight)}</p><div class="bodyfooter group"><div class="line"></div><div class="meta"><span>THE BRIEF</span><span>본문 ${index}/${p.count}</span></div></div>` : `<img class="photo" src="${image}"><div class="scrim"></div><div class="content"><div class="group">${c.kicker && !p.kickerHidden ? `<div><span class="kicker">${escape(c.kicker)}</span></div>` : ""}<h1 id="headline"></h1></div><div class="group"><div class="line"></div><div class="meta"><span id="credit">${escape(aiLabel(p) ?? p.credit)}</span><span class="domain">THE BRIEF</span></div></div></div>`}</article></body></html>`;
+  const textIndexes = c.pages.flatMap((page, i) =>
+    isPhotoPage(page) ? [] : [i],
+  );
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>@font-face{font-family:Pretendard;src:url(data:font/woff2;base64,${font});font-weight:45 920;font-display:block}*{box-sizing:border-box}body{margin:0;font-family:Pretendard;color:white}.card{width:1080px;height:1350px;overflow:hidden;position:relative;background:#0B1B2B}.photo{position:absolute;width:100%;height:100%;object-fit:cover;object-position:${p.focal.x}% ${p.focal.y}%;transform:scale(${p.focal.zoom});transform-origin:${p.focal.x}% ${p.focal.y}%}.scrim{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(11,27,43,0) 34%,rgba(11,27,43,.88) 72%,rgba(11,27,43,.97) 100%)}.content{position:absolute;left:64px;right:64px;bottom:64px;display:flex;flex-direction:column;gap:32px}.group{display:flex;flex-direction:column;gap:18px}.kicker{display:inline-block;background:#C8102E;padding:10px 20px;font-size:42px;font-weight:800;letter-spacing:.02em;white-space:nowrap}h1{margin:0;font-size:88px;font-weight:800;line-height:1.14;letter-spacing:-.025em;white-space:pre;word-break:keep-all}.gold{color:#FFC72C}.line{height:2px;background:rgba(255,255,255,.3)}.meta{display:flex;justify-content:space-between;gap:24px;color:rgba(255,255,255,.72);font-size:24px;font-weight:600}.domain{letter-spacing:.06em;white-space:nowrap}.bodycard{padding:80px 64px}.eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#FFC72C}.bodytitle{font-size:48px;line-height:1.25;margin:64px 0 42px;word-break:keep-all;overflow-wrap:normal}.bodytext{font-size:${p.bodyFont}px;line-height:1.45;font-weight:650;white-space:pre-wrap;word-break:keep-all;overflow-wrap:normal;margin:0;max-height:840px}.bodyfooter{position:absolute;bottom:64px;left:64px;right:64px}.pc-photo{position:absolute;inset:0;width:100%;height:100%}.pc-scrim{position:absolute;left:0;right:0;bottom:0;height:520px;background:linear-gradient(to bottom,rgba(11,27,43,0),rgba(11,27,43,.9) 55%)}.pc-text{position:absolute;left:64px;right:64px;bottom:120px;margin:0;font-size:46px;line-height:1.4;font-weight:750;white-space:pre-wrap;word-break:keep-all;overflow-wrap:normal;max-height:193px;overflow:hidden}.pc-credit{position:absolute;right:64px;bottom:56px;font-size:22px;font-weight:600;color:rgba(255,255,255,.72)}.pc-credit.alone{background:rgba(11,27,43,.6);padding:6px 12px}</style></head><body><article class="card ${index && !isPhotoPage(pg) ? "bodycard" : ""}">${index && isPhotoPage(pg) ? photoCardHtml(pg.photoCard!, image) : index ? `<div class="eyebrow">NEWS BRIEF / ${String(index).padStart(2, "0")}</div><h2 class="bodytitle">${escape(pg.title)}</h2><p class="bodytext">${mark(pg.body, pg.highlight)}</p><div class="bodyfooter group"><div class="line"></div><div class="meta"><span>THE BRIEF</span><span>본문 ${textIndexes.indexOf(index - 1) + 1}/${textIndexes.length}</span></div></div>` : `<img class="photo" src="${image}"><div class="scrim"></div><div class="content"><div class="group">${c.kicker && !p.kickerHidden ? `<div><span class="kicker">${escape(c.kicker)}</span></div>` : ""}<h1 id="headline"></h1></div><div class="group"><div class="line"></div><div class="meta"><span id="credit">${escape(aiLabel(p) ?? p.credit)}</span><span class="domain">THE BRIEF</span></div></div></div>`}</article></body></html>`;
+}
+// Only the canonical AI spelling is shown; an alias would hide its label.
+async function readPhoto(photo: string, card?: number) {
+  const failure = () =>
+    Object.assign(
+      new Error(
+        card
+          ? `카드 ${card}의 사진을 읽을 수 없습니다. 다시 첨부하세요.`
+          : "사진을 읽을 수 없습니다. 다시 첨부하세요.",
+      ),
+      { code: "IMAGE" },
+    );
+  if (!photoPathAllowed(photo)) throw failure();
+  try {
+    return (
+      "data:image/jpeg;base64," +
+      (
+        await fs.readFile(path.join(root, "uploads", path.basename(photo)))
+      ).toString("base64")
+    );
+  } catch {
+    throw failure();
+  }
 }
 export async function render(p: Project, only?: number) {
   p = migrateCover(structuredClone(p));
@@ -39,15 +80,29 @@ export async function render(p: Project, only?: number) {
       code: "IMAGE",
     });
   if (!p.copy.headline.trim()) throw new Error("제목을 입력해 주세요.");
+  // Text kept behind a photo card is not output, so it is not checked.
+  const selected = (i: number) => only === undefined || only === i + 1;
   if (
     only !== 0 &&
     p.copy.pages.some(
       (pg, i) =>
-        (only === undefined || only === i + 1) &&
+        selected(i) &&
+        !isPhotoPage(pg) &&
         (!pg.title.trim() || !pg.body.trim()),
     )
   )
     throw new Error("모든 본문 페이지의 제목과 본문을 입력해 주세요.");
+  for (const [i, pg] of p.copy.pages.entries())
+    if (selected(i) && isPhotoPage(pg)) {
+      if (!pg.photoCard?.photo)
+        throw Object.assign(new Error(`카드 ${i + 2}의 사진이 없습니다.`), {
+          code: "IMAGE",
+        });
+      if ([...pg.photoCard.text].length > PHOTO_TEXT_LIMIT)
+        throw new Error(
+          `카드 ${i + 2}의 사진 문구는 ${PHOTO_TEXT_LIMIT}자 이내로 줄여 주세요.`,
+        );
+    }
   if (!p.kickerHidden && [...p.copy.kicker].length > 20)
     throw new Error("부제는 공백 포함 20자 이내로 수정해 주세요.");
   if (!Number.isInteger(p.bodyFont) || p.bodyFont < 54 || p.bodyFont > 60)
@@ -63,25 +118,11 @@ export async function render(p: Project, only?: number) {
       { code: "FONT" },
     );
   }
-  // Only the canonical AI spelling is shown; an alias would hide its label.
-  if (!photoPathAllowed(p.photo))
-    throw Object.assign(
-      new Error("사진을 읽을 수 없습니다. 다시 첨부하세요."),
-      { code: "IMAGE" },
-    );
-  let image;
-  try {
-    image =
-      "data:image/jpeg;base64," +
-      (
-        await fs.readFile(path.join(root, "uploads", path.basename(p.photo)))
-      ).toString("base64");
-  } catch {
-    throw Object.assign(
-      new Error("사진을 읽을 수 없습니다. 다시 첨부하세요."),
-      { code: "IMAGE" },
-    );
-  }
+  const image = await readPhoto(p.photo);
+  const cardImages = new Map<number, string>();
+  for (const [i, pg] of p.copy.pages.entries())
+    if (selected(i) && only !== 0 && isPhotoPage(pg))
+      cardImages.set(i + 1, await readPhoto(pg.photoCard!.photo, i + 2));
   const semanticPlans =
     !headline.manual && (only === undefined || only === 0)
       ? await headlinePlans(headline.text)
@@ -103,7 +144,7 @@ export async function render(p: Project, only?: number) {
         ? Array.from({ length: p.count + 1 }, (_, i) => i)
         : [only];
     for (const i of indexes) {
-      await page.setContent(html(p, i, font, image));
+      await page.setContent(html(p, i, font, cardImages.get(i) ?? image));
       // tsx preserves nested function names with this esbuild helper in serialized evaluate callbacks.
       await page.addScriptTag({
         content:
@@ -129,7 +170,22 @@ export async function render(p: Project, only?: number) {
           new Error("Pretendard 로딩 실패: 대체 폰트로 출력하지 않습니다."),
           { code: "FONT" },
         );
-      if (i === 0) {
+      if (cardImages.has(i)) {
+        const problem = await page.evaluate(() => {
+          const img = document.querySelector("img")!;
+          if (!img.complete || !img.naturalWidth) return "decode";
+          const t = document.querySelector(".pc-text");
+          return t && t.scrollHeight > t.clientHeight + 1 ? "overflow" : "";
+        });
+        if (problem === "decode")
+          throw Object.assign(new Error(`카드 ${i + 1}의 사진 디코딩 실패`), {
+            code: "IMAGE",
+          });
+        if (problem)
+          throw new Error(
+            `카드 ${i + 1}의 사진 문구가 3줄을 넘습니다. 문구를 줄여 주세요.`,
+          );
+      } else if (i === 0) {
         if (
           !(await page
             .locator("img")

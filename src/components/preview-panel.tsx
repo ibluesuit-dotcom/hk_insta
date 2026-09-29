@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Icon } from "../icons";
 import { PreviewImage } from "../preview-image";
 import { Studio } from "../hooks/use-studio";
+import { cardAlt, cardKind } from "../../shared/model";
 
 /** Right-hand live output: phone mockup / original card, render and export. */
 export function PreviewPanel({ s }: { s: Studio }) {
@@ -89,11 +90,7 @@ export function PreviewPanel({ s }: { s: Studio }) {
               {p.renders[index] ? (
                 <PreviewImage
                   key={p.renders[index]}
-                  alt={
-                    index
-                      ? committed!.copy.pages[index - 1]?.alt
-                      : committed!.copy.alt
-                  }
+                  alt={cardAlt(committed!, index)}
                   src={p.renders[index]}
                 />
               ) : (
@@ -166,7 +163,9 @@ export function PreviewPanel({ s }: { s: Studio }) {
           ←
         </button>
         <span>
-          {index === 0 ? "표지" : `본문 ${index}`}{" "}
+          {index === 0
+            ? "표지"
+            : `${cardKind(p, index) === "photo" ? "사진" : "본문"} ${index}`}{" "}
           <small>
             {index + 1} / {p.count + 1}
           </small>
