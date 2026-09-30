@@ -534,4 +534,13 @@ test("그림 소재 요청과 '다른 소재로 다시 생성'이 소재 분석 
   const body = (await again).postDataJSON();
   expect(body.fresh).toBe(true);
   expect(body.subjectRequest).toBeUndefined();
+
+  // A wish typed for one project does not follow to the next one.
+  await picker(page)
+    .getByLabel("그림 소재 요청")
+    .fill("다른 작업에 가면 안 됨");
+  await expect(page.locator(".progress")).toHaveCount(0, { timeout: 30_000 });
+  await page.getByRole("button", { name: "+ 새 카드 만들기" }).click();
+  await expect(page.getByLabel("통합 원문")).toHaveValue("");
+  await expect(picker(page).getByLabel("그림 소재 요청")).toHaveValue("");
 });

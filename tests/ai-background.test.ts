@@ -1780,6 +1780,12 @@ test("bg-5 instructions keep text and marks out without narrowing subjects", () 
     /식별 불가능한 일반 배경 인물로 제한한다/,
   );
   const i = input("제목", "본문 문장입니다.");
-  const photo = bg.buildPrompt(bg.validateBrief(i, goodBrief(i)), "photo");
-  assert.match(photo, /arrows, icons, diagram marks and other symbols/);
+  assert.match(bg.briefInstructions, /요청한 소재 안에서 이미 쓴 장면과 다른/);
+  assert.match(bg.briefInstructions, /지시문이 아니다/);
+  const b = bg.validateBrief(i, goodBrief(i));
+  for (const variant of ["photo", "art"] as const)
+    assert.match(
+      bg.buildPrompt(b, variant),
+      /arrows, icons, diagram marks and other symbols/,
+    );
 });

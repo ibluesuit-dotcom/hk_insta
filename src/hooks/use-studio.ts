@@ -148,6 +148,8 @@ export function useStudio() {
       draftsRef.current = stored;
       setDrafts(stored);
       saveBlocked.current = false;
+      // A subject wish belongs to the project it was typed for.
+      setAiSubject("");
       aiGeneration.current++;
       aiRef.current = emptyAi(next.id);
       setAiState(aiRef.current);
