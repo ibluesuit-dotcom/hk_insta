@@ -1150,8 +1150,14 @@ header h1 {
     margin-left: 70px;
     padding: 0 18px;
   }
+  /* 1fr is minmax(auto, 1fr): the editor's min-content (482px wide at a
+     390px viewport) widened the page. Let the column and its panes shrink. */
   .workspace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .editor,
+  .preview-panel {
+    min-width: 0;
   }
   .preview-panel {
     position: static;
@@ -1176,6 +1182,15 @@ header h1 {
   }
   .project-bar input {
     width: 220px;
+  }
+  /* The name field shrinks so a long status badge stays on screen. */
+  .project-bar > div:first-child {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .project-bar input {
+    min-width: 0;
+    flex: 0 1 220px;
   }
 }
 .comparison {

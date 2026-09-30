@@ -325,6 +325,67 @@ test("templates always carry the fixed safe-area, no-text and AI disclosure line
   );
 });
 
+test("bg-3/4: templates list only the described objects, lift focal objects, hide tiny marks", () => {
+  assert.equal(shared.BG_PROMPT_VERSION, "bg-4");
+  const i = input("제목", "본문 문장입니다.");
+  const b = bg.validateBrief(i, goodBrief(i));
+  const photo = bg.buildPrompt(b, "photo");
+  const art = bg.buildPrompt(b, "art");
+  for (const prompt of [photo, art]) {
+    assert.match(
+      prompt,
+      /Depict only the objects explicitly listed in the scene description\./,
+    );
+    assert.match(
+      prompt,
+      /gifts, festive foliage, seasonal decorations,\nflags or institutional emblems unless explicitly required/,
+    );
+    assert.match(
+      prompt,
+      /Keep all focal objects, including loose items and the edges of the main object,\nabove the lower text-safe region/,
+    );
+  }
+  assert.match(
+    photo,
+    /resistor\ncodes, PCB silkscreen, serial markings and tiny component labels out of view/,
+  );
+  assert.match(photo, /retail packaging and display-box logos out of view/);
+  // bg-4: retest found a Korean room plaque and a card-back look-alike in art.
+  for (const prompt of [photo, art]) {
+    assert.match(
+      prompt,
+      /Leave out signs, room plaques, nameplates and wall notices/,
+    );
+    assert.match(prompt, /no writing in any script, including Korean/);
+    assert.match(
+      prompt,
+      /Do not imitate a\nreal product line, franchise character, card back, emblem or packaging design/,
+    );
+  }
+});
+
+test("bg-3/4: brief instructions keep jurisdiction, drop timing from slots, scope review", () => {
+  const t = bg.briefInstructions;
+  assert.match(t, /국가·지역·관할과 주택·시설의 유형은 일반 장면에도 보존/);
+  assert.match(t, /다른 국가의 국기·국장·법정 상징으로 대체하지 않는다/);
+  assert.match(t, /근거가 없으면 국가 상징을 넣지 않고/);
+  assert.match(t, /지역 적합성을 판단하기 어려우면 needs_review/);
+  assert.match(
+    t,
+    /art\.plain_topic: [^\n]*날짜·연휴·계절은 제외[^\n]*축제·명절 자체가 핵심 주제일 때만/,
+  );
+  assert.match(t, /photo\.generic_setting: [^\n]*국가·지역·주택\/시설 유형은 유지/);
+  assert.match(t, /저항 코드·실크스크린·일련번호/);
+  assert.match(t, /진열 박스·카드 제품 로고가 보이지 않는 각도/);
+  assert.match(
+    t,
+    /재난·수사·재판[^\n]*실제 현장·압수물[^\n]*review_reason[^\n]*needs_review/,
+  );
+  assert.match(t, /실존 인물 이름이 있다는 이유만으로 needs_review로 표시하지 않는다/);
+  assert.match(t, /명판·안내판·간판은 장면에서 뺀다/);
+  assert.match(t, /카드 뒷면·엠블럼·포장 디자인을 닮게 그리지 않고/);
+});
+
 test("brief request: input contract, limits, caching and coalescing", async () => {
   const p = await project(
     "제".repeat(400),
@@ -432,7 +493,7 @@ test("image b64 is stored as original and normalized card; blocked and 429 are m
   const sidecar = JSON.parse(await fs.readFile(files.sidecar, "utf8"));
   assert.equal(sidecar.projectId, p.id);
   assert.equal(sidecar.briefId, b.briefId);
-  assert.equal(sidecar.promptVersion, "bg-2");
+  assert.equal(sidecar.promptVersion, "bg-4");
   assert.match(sidecar.prompt, /lower 30%/);
 
   imageReply = () => ({
@@ -536,7 +597,7 @@ test("sidecar is published last; past the deadline nothing is published and file
     projectId: p.id,
     variant: "photo" as const,
     model: "gpt-image-2.5-flare",
-    promptVersion: "bg-2",
+    promptVersion: "bg-4",
     prompt: bg.buildPrompt(record.brief, "photo"),
     brief: record.brief,
     sourceHash: record.sourceHash,
@@ -692,6 +753,213 @@ test("recent returns the latest completed candidate per variant of this project 
   );
 });
 
+test("recent reports running jobs; a second same-variant call is 409 and unpaid", async () => {
+  const p = await project("진행", "진행 중 작업 본문.");
+  const recent = async () =>
+    (await api("GET", `/api/projects/${p.id}/ai-background/recent`)).json;
+  // A brief for one variant shows only that variant as running.
+  briefReply = (i) => ({ json: goodBrief(i), delay: 150 });
+  const briefing = api("POST", `/api/projects/${p.id}/ai-background/brief`, {
+    expectedSourceHash: sourceHash(p),
+    variants: ["art"],
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  const during = await recent();
+  assert.equal(during.pending?.art?.stage, "brief");
+  assert.equal(during.pending?.photo, undefined);
+  const b = (await briefing).json;
+  briefReply = (i) => ({ json: goodBrief(i) });
+  // Still running until its images start, or the grace passes without them.
+  assert.equal((await recent()).pending?.art?.stage, "brief");
+  const grace = bg.progressTiming.graceMs;
+  bg.progressTiming.graceMs = 1;
+  const quick = await api("POST", `/api/projects/${p.id}/ai-background/brief`, {
+    expectedSourceHash: sourceHash(p),
+    variants: ["art"],
+  });
+  bg.progressTiming.graceMs = grace;
+  assert.equal(quick.status, 200);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(await recent(), {});
+
+  const good = imageReply;
+  imageReply = (body) => ({ ...good(body), delay: 200 });
+  try {
+    const before = { ...calls };
+    const first = generate(p, b.briefId, "photo");
+    await new Promise((r) => setTimeout(r, 50));
+    const running = await recent();
+    assert.equal(running.pending.photo.stage, "image");
+    assert.match(running.pending.photo.startedAt, /^\d{4}-\d\d-\d\dT/);
+    const again = await generate(p, b.briefId, "photo");
+    assert.equal(again.status, 409);
+    assert.equal(again.json.code, "AI_IN_PROGRESS");
+    assert.equal(again.json.startedAt, running.pending.photo.startedAt);
+    assert.match(again.json.message, /이미 이 이미지를 만들고 있습니다/);
+    // Another variant and another project are not blocked.
+    const other = await project("다른 진행", "다른 작업 본문.");
+    const otherBrief = (await brief(other)).json;
+    const [art, otherPhoto] = await Promise.all([
+      generate(p, b.briefId, "art"),
+      generate(other, otherBrief.briefId, "photo"),
+    ]);
+    assert.equal(art.status, 200);
+    assert.equal(otherPhoto.status, 200);
+    const done = await first;
+    assert.equal(done.status, 200);
+    assert.equal(calls.image, before.image + 3);
+    const after = await recent();
+    assert.equal(after.pending, undefined);
+    assert.equal(after.photo.assetId, done.json.assetId);
+    assert.ok(after.photo.at >= running.pending.photo.startedAt);
+
+    // A failure is kept for a reloaded page, and cleared by the next start.
+    imageReply = () => ({ status: 500, error: { message: "boom" } });
+    const failed = await generate(p, b.briefId, "art");
+    assert.equal(failed.status >= 400, true);
+    const withFailure = await recent();
+    assert.equal(withFailure.failures.art.code, failed.json.code);
+    assert.equal(withFailure.failures.art.message, failed.json.message);
+    assert.equal(withFailure.failures.photo, undefined);
+    assert.equal(withFailure.art.assetId, art.json.assetId);
+    imageReply = good;
+    assert.equal((await generate(p, b.briefId, "art")).status, 200);
+    assert.equal((await recent()).failures, undefined);
+  } finally {
+    imageReply = good;
+  }
+});
+
+// ------------------------------------------------------------ operations
+// CODEX-VERIFY N1~N3: one generation is one server-issued operation.
+const recentOf = async (p: any) =>
+  (await api("GET", `/api/projects/${p.id}/ai-background/recent`)).json;
+const briefFor = (p: any, variants: string[]) =>
+  api("POST", `/api/projects/${p.id}/ai-background/brief`, {
+    expectedSourceHash: sourceHash(p),
+    variants,
+  });
+const imageFor = (
+  p: any,
+  briefId: string,
+  variant: string,
+  operationId: string,
+) =>
+  api("POST", `/api/projects/${p.id}/ai-background`, {
+    briefId,
+    variant,
+    operationId,
+  });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+test("N2 the brief→image gap stays running, and a superseded operation's late images are refused unpaid", async () => {
+  const p = await project("두 탭", "두 탭 전환 공백 본문.");
+  const a = (await briefFor(p, ["photo", "art"])).json;
+  // Tab A has its brief but has not sent the images yet: still running.
+  const gap = await recentOf(p);
+  assert.equal(gap.pending?.photo?.stage, "brief", JSON.stringify(gap));
+  assert.equal(gap.pending?.art?.stage, "brief");
+  // Tab B starts over by hand: a new operation that completes both images.
+  const b = (await briefFor(p, ["photo", "art"])).json;
+  assert.ok(a.operationId && b.operationId);
+  assert.notEqual(a.operationId, b.operationId);
+  const before = calls.image;
+  for (const v of ["photo", "art"])
+    assert.equal((await imageFor(p, b.briefId, v, b.operationId)).status, 200);
+  // Tab A's held requests arrive late: 409 before any provider call.
+  for (const v of ["photo", "art"]) {
+    const late = await imageFor(p, a.briefId, v, a.operationId);
+    assert.equal(late.status, 409);
+    assert.equal(late.json.code, "AI_SUPERSEDED");
+    assert.ok(late.json.startedAt);
+  }
+  assert.equal(calls.image, before + 2);
+  const done = await recentOf(p);
+  assert.equal(done.pending, undefined);
+  assert.equal(done.failures, undefined);
+});
+
+test("an operation whose images never come stops running after the grace", async () => {
+  const grace = bg.progressTiming?.graceMs;
+  if (bg.progressTiming) bg.progressTiming.graceMs = 100;
+  try {
+    const p = await project("유예", "이미지 요청이 오지 않는 본문.");
+    await briefFor(p, ["photo", "art"]);
+    assert.equal((await recentOf(p)).pending?.photo?.stage, "brief");
+    await sleep(150);
+    assert.deepEqual(await recentOf(p), {});
+  } finally {
+    if (bg.progressTiming) bg.progressTiming.graceMs = grace!;
+  }
+});
+
+test("R1 a late image of an operation whose grace expired is refused and shown as failed", async () => {
+  const grace = bg.progressTiming?.graceMs;
+  if (bg.progressTiming) bg.progressTiming.graceMs = 100;
+  try {
+    const p = await project("유예 만료", "이미지 요청이 늦게 오는 본문입니다.");
+    const a = (await briefFor(p, ["photo", "art"])).json;
+    await sleep(150); // 다른 창은 이 시점에 "중단"으로 판단한다
+    const late = await imageFor(p, a.briefId, "photo", a.operationId);
+    assert.equal(late.status, 409);
+    assert.equal(late.json.code, "AI_OPERATION_EXPIRED");
+    const seen = await recentOf(p);
+    assert.equal(seen.failures?.photo?.code, "AI_OPERATION_EXPIRED");
+    assert.equal(seen.photo, undefined, "만료된 작업은 후보를 만들지 않는다");
+  } finally {
+    if (bg.progressTiming) bg.progressTiming.graceMs = grace!;
+  }
+});
+
+test("N3 briefs for different variants of one project are both running", async () => {
+  const p = await project("겹친 분석", "겹친 분석 본문.");
+  briefReply = (i) => ({ json: goodBrief(i), delay: 200 });
+  try {
+    const photo = briefFor(p, ["photo"]);
+    await sleep(50);
+    const art = briefFor(p, ["art"]);
+    await sleep(50);
+    const during = await recentOf(p);
+    assert.equal(during.pending?.photo?.stage, "brief", JSON.stringify(during));
+    assert.equal(during.pending?.art?.stage, "brief");
+    await Promise.all([photo, art]);
+  } finally {
+    briefReply = (i) => ({ json: goodBrief(i) });
+  }
+});
+
+test("N1 a recent read across a completion shows the candidate or the running job", async () => {
+  const p = await project("완료 경계", "완료 경계 본문.");
+  const b = (await briefFor(p, ["photo"])).json;
+  const good = imageReply;
+  imageReply = (body) => ({ ...good(body), delay: 200 });
+  const readdir = fs.readdir;
+  try {
+    const running = imageFor(p, b.briefId, "photo", b.operationId);
+    await sleep(50);
+    assert.equal((await recentOf(p)).pending?.photo?.stage, "image");
+    // The listing is taken, then the image completes before recent answers.
+    let armed = true;
+    (fs as any).readdir = async (...args: any[]) => {
+      const names = await (readdir as any)(...args);
+      if (armed && String(args[0]).endsWith("ai-backgrounds")) {
+        armed = false;
+        await running;
+      }
+      return names;
+    };
+    const r = await recentOf(p);
+    const done = (await running).json;
+    assert.ok(
+      r.photo?.assetId === done.assetId || r.pending?.photo,
+      "torn recent: " + JSON.stringify(r),
+    );
+  } finally {
+    (fs as any).readdir = readdir;
+    imageReply = good;
+  }
+});
+
 // ------------------------------------------------------------ provenance & apply
 test("apply: revision conflict, focal reset, approvals dropped, render needed", async () => {
   const p = await project("적용", "적용 본문입니다.");
@@ -742,7 +1010,7 @@ test("apply: revision conflict, focal reset, approvals dropped, render needed", 
     assetId: asset.assetId,
     variant: "photo",
     model: "gpt-image-2.5-flare",
-    promptVersion: "bg-2",
+    promptVersion: "bg-4",
     subject: "컨테이너 항만",
     status: "ready",
     reviewReason: null,
@@ -983,7 +1251,7 @@ test("render shows only the AI label while the AI asset is the cover; manifest f
     assetId,
     variant: "photo",
     model: "gpt-image-2.5-flare",
-    promptVersion: "bg-2",
+    promptVersion: "bg-4",
     subject: "항만",
     status: "ready",
     reviewReason: null,
@@ -1154,7 +1422,7 @@ test("N1: an asset applied right after its rename keeps its files and renders", 
           projectId: p.id,
           variant: "art",
           model: "gpt-image-2.5-flare",
-          promptVersion: "bg-2",
+          promptVersion: "bg-4",
           prompt: bg.buildPrompt(record.brief, "art"),
           brief: record.brief,
           sourceHash: record.sourceHash,

@@ -133,10 +133,10 @@ function CandidateCard({
   const [badge, tone] =
     slot.status === "generating"
       ? ["생성 중…", "busy"]
-      : slot.status === "failed"
-        ? [slot.blocked ? "생성 거절됨" : "생성 실패", "bad"]
-        : applied
-          ? ["적용됨", "good"]
+      : applied
+        ? ["적용됨", "good"]
+        : slot.status === "failed"
+          ? [slot.blocked ? "생성 거절됨" : "생성 실패", "bad"]
           : c?.status === "needs_review"
             ? ["검토 필요", "warn"]
             : c
@@ -154,7 +154,7 @@ function CandidateCard({
         {stale && <span className="ai-badge warn">이전 기사 기준</span>}
       </div>
       <div className="ai-frame">
-        {c && slot.status !== "failed" ? (
+        {c ? (
           <>
             <img src={c.url} alt={`${name} AI 배경 후보: ${c.subject}`} />
             <div className="ai-scrim" aria-hidden="true" />
@@ -180,12 +180,21 @@ function CandidateCard({
           <div className="ai-overlay">다시 만드는 중…</div>
         )}
       </div>
-      {slot.status === "failed" && slot.error && (
-        <p className="warn" role="alert">
-          {slot.error}
+      {slot.status === "failed" && (
+        <p className="warn ai-failure" role="alert">
+          {c
+            ? "다시 만들지 못했습니다. 이전 후보는 그대로 쓸 수 있습니다. "
+            : ""}
+          {slot.error || "생성하지 못했습니다. 다시 시도하세요."}
+          {slot.code && (
+            <small className="error-code" title="진단 코드">
+              {" "}
+              ({slot.code})
+            </small>
+          )}
         </p>
       )}
-      {c && slot.status !== "failed" && (
+      {c && (
         <>
           <p className="ai-subject">{c.subject}</p>
           {c.status === "needs_review" && (
@@ -194,7 +203,7 @@ function CandidateCard({
         </>
       )}
       <div className="ai-actions">
-        {c && slot.status !== "failed" && (
+        {c && (
           <>
             <a href={c.url} target="_blank" rel="noreferrer">
               원본 보기

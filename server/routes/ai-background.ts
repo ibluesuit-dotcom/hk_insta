@@ -7,7 +7,7 @@ import {
   sourceHash,
 } from "../../shared/ai-background";
 import { read, save, mutate } from "../store";
-import { wrap } from "../http";
+import { publicMessage, wrap } from "../http";
 import {
   assetUsableBy,
   briefIdSchema,
@@ -18,7 +18,10 @@ import {
   generateBackground,
   loadBrief,
   loadSidecar,
+  progress,
   recentCandidates,
+  startImage,
+  startOperation,
 } from "../ai-background";
 
 // AI cover backgrounds: brief → two candidates → explicit apply.
@@ -32,6 +35,11 @@ function requireGenerate() {
       status: 403,
     });
 }
+
+const failureOf = (e: unknown) => ({
+  code: (e as any)?.code || "INPUT",
+  message: publicMessage(e),
+});
 
 export const aiBackgroundRouter = express.Router();
 aiBackgroundRouter.post(
@@ -48,8 +56,25 @@ aiBackgroundRouter.post(
         ),
         { code: "SOURCE_CHANGED", status: 409, sourceHash: hash },
       );
-    const record = await ensureBrief(p, d);
+    // The variants this brief is for, so a reloaded page knows what runs.
+    const variants = z
+      .array(aiVariantSchema)
+      .min(1)
+      .optional()
+      .catch(undefined)
+      .parse(req.body?.variants);
+    // A manual generate: a new operation the image requests carry.
+    const op = startOperation(p.id, variants);
+    let record;
+    try {
+      record = await ensureBrief(p, d);
+    } catch (e) {
+      op.end(failureOf(e));
+      throw e;
+    }
+    op.end();
     res.json({
+      operationId: op.operationId,
       briefId: record.briefId,
       sourceHash: record.sourceHash,
       status: record.brief.status,
@@ -64,8 +89,12 @@ aiBackgroundRouter.post(
   wrap(async (req, res) => {
     const d = deadline();
     requireGenerate();
-    const { briefId, variant } = z
-      .object({ briefId: briefIdSchema, variant: aiVariantSchema })
+    const { briefId, variant, operationId } = z
+      .object({
+        briefId: briefIdSchema,
+        variant: aiVariantSchema,
+        operationId: z.string().uuid().optional(),
+      })
       .parse(req.body);
     const p = (await read(req.params.id)).current;
     // The confirmed snapshot is used as is; later edits only mark the result.
@@ -75,7 +104,17 @@ aiBackgroundRouter.post(
         new Error("AI 소재 분석 결과가 없습니다. 다시 생성하세요."),
         { code: "AI_BRIEF_MISSING", status: 404 },
       );
-    const sidecar = await generateBackground(record, variant, randomUUID(), d);
+    // Checked and recorded with no await in between: one paid call per
+    // project and variant at a time, and none for a superseded operation.
+    const job = startImage(p.id, variant, operationId);
+    let sidecar;
+    try {
+      sidecar = await generateBackground(record, variant, randomUUID(), d);
+    } catch (e) {
+      job.end({ error: failureOf(e) });
+      throw e;
+    }
+    job.end({ assetId: sidecar.assetId });
     res.json(candidate(sidecar));
   }),
 );
@@ -117,6 +156,20 @@ aiBackgroundRouter.get(
   "/api/projects/:id/ai-background/recent",
   wrap(async (req, res) => {
     const p = (await read(req.params.id)).current;
-    res.json(await recentCandidates(p.id));
+    // Progress first, then the files: an operation that ended before the
+    // snapshot has its asset on disk. A change during the listing is read
+    // once more, so a completion is never reported as neither.
+    let snap = progress(p.id);
+    let found = await recentCandidates(p.id, snap.done);
+    if (progress(p.id).version !== snap.version) {
+      snap = progress(p.id);
+      found = await recentCandidates(p.id, snap.done);
+    }
+    const { pending, failures } = snap;
+    res.json({
+      ...found,
+      ...(Object.keys(pending).length ? { pending } : {}),
+      ...(Object.keys(failures).length ? { failures } : {}),
+    });
   }),
 );

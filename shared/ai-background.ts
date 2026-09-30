@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // AI background contract shared by the browser, the server and stored projects.
-export const BG_PROMPT_VERSION = "bg-2";
+export const BG_PROMPT_VERSION = "bg-4";
 export const AI_LABELS = {
   photo: "AI 생성 이미지",
   art: "AI 생성 일러스트",

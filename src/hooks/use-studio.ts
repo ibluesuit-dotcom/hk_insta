@@ -37,12 +37,24 @@ export type AiSlot = {
   requestId: number;
   candidate?: AiCandidate;
   error?: string;
+  code?: string;
   blocked?: boolean;
+  /** Start of a server job this page did not start (reload, 409): polled. */
+  since?: string;
+  /** Polls in a row with neither the job nor its result. */
+  misses?: number;
 };
+type AiRecent = Partial<Record<AiVariant, AiCandidate>> & {
+  pending?: Partial<
+    Record<AiVariant, { stage?: "brief" | "image"; startedAt: string }>
+  >;
+  failures?: Partial<
+    Record<AiVariant, { code: string; message: string; at: string }>
+  >;
+};
+const AI_POLL_MS = 1500;
 export type AiState = {
   projectId: string;
-  briefId?: string;
-  briefHash?: string;
   notice: string;
   slots: Record<AiVariant, AiSlot>;
 };
@@ -70,7 +82,13 @@ export function useStudio() {
   const [view, setView] = useState("studio");
   const [tab, setTab] = useState("source");
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
+  const [error, setErrorText] = useState("");
+  // Server error code, shown apart from the Korean message as a detail.
+  const [errorCode, setErrorCode] = useState("");
+  function setError(message: string, code?: unknown) {
+    setErrorText(message);
+    setErrorCode(typeof code === "string" ? code : "");
+  }
   const [saved, setSaved] = useState("서버에 자동 저장");
   const [dirty, setDirty] = useState(false);
   const [index, setIndex] = useState(0);
@@ -213,10 +231,13 @@ export function useStudio() {
       };
     });
   }
-  /** Restore completed candidates after reload or re-entering a project. */
+  /**
+   * Restore completed candidates after reload or re-entering a project, and
+   * show server jobs still running as generating until they finish.
+   */
   async function loadAiRecent(projectId: string) {
     const generation = aiGeneration.current;
-    let recent: Partial<Record<AiVariant, AiCandidate>>;
+    let recent: AiRecent;
     try {
       recent = await api(`/projects/${projectId}/ai-background/recent`);
     } catch {
@@ -225,14 +246,111 @@ export function useStudio() {
     setAi(projectId, generation, (state) => {
       const slots = { ...state.slots };
       for (const variant of AI_VARIANTS) {
+        const slot = slots[variant];
         const candidate = recent[variant];
-        // A running or already filled slot is never replaced by recent.
-        if (candidate && slots[variant].status === "idle")
-          slots[variant] = { ...slots[variant], status: "done", candidate };
+        const job = recent.pending?.[variant];
+        // A request of this page is never replaced by recent.
+        if (slot.status === "generating" && !slot.since) continue;
+        if (job)
+          slots[variant] = {
+            ...slot,
+            status: "generating",
+            requestId: ++aiRequest.current,
+            candidate: slot.candidate || candidate,
+            since: job.startedAt,
+            error: undefined,
+          };
+        else if (slot.status === "idle") {
+          // A failure newer than the candidate is shown over it, as on the
+          // page that was following it; the candidate stays usable.
+          const failure = recent.failures?.[variant];
+          if (failure && (!candidate || failure.at >= candidate.at))
+            slots[variant] = {
+              ...slot,
+              status: "failed",
+              candidate,
+              error: failure.message,
+              code: failure.code,
+              blocked: failure.code === "AI_BLOCKED",
+            };
+          else if (candidate)
+            slots[variant] = { ...slot, status: "done", candidate };
+        }
       }
       return { ...state, slots };
     });
   }
+  /** Settle polled slots whose server job has ended. */
+  async function pollAi(projectId: string) {
+    const generation = aiGeneration.current;
+    let recent: AiRecent;
+    try {
+      recent = await api(`/projects/${projectId}/ai-background/recent`);
+    } catch {
+      return;
+    }
+    setAi(projectId, generation, (state) => {
+      const slots = { ...state.slots };
+      let notice = state.notice;
+      for (const variant of AI_VARIANTS) {
+        const slot = slots[variant];
+        if (slot.status !== "generating" || !slot.since) continue;
+        const job = recent.pending?.[variant];
+        if (job) {
+          slots[variant] = { ...slot, since: job.startedAt, misses: 0 };
+          continue;
+        }
+        const candidate = recent[variant];
+        const failure = recent.failures?.[variant];
+        const base = { ...slot, since: undefined, misses: 0 };
+        if (candidate && candidate.at >= slot.since)
+          slots[variant] = { ...base, status: "done", candidate };
+        else if (failure && failure.at >= slot.since)
+          slots[variant] = {
+            ...base,
+            status: "failed",
+            error: failure.message,
+            code: failure.code,
+            blocked: failure.code === "AI_BLOCKED",
+          };
+        else if ((slot.misses || 0) < 1)
+          // One empty answer is not proof: ask once more before settling.
+          slots[variant] = { ...slot, misses: (slot.misses || 0) + 1 };
+        else {
+          // Stopped before the image step (the page that asked went away).
+          slots[variant] = {
+            ...base,
+            status: slot.candidate ? "done" : "idle",
+          };
+          notice =
+            "새로고침으로 이미지 생성이 이어지지 않았습니다. 다시 생성하세요.";
+        }
+      }
+      return { ...state, slots, notice };
+    });
+  }
+  const aiPolling =
+    !!ai &&
+    AI_VARIANTS.some(
+      (v) => ai.slots[v].status === "generating" && ai.slots[v].since,
+    );
+  useEffect(() => {
+    if (!aiPolling || !ai) return;
+    const projectId = ai.projectId;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      timer = setTimeout(async () => {
+        await pollAi(projectId);
+        if (!stop) tick();
+      }, AI_POLL_MS);
+    };
+    tick();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [aiPolling, ai?.projectId]);
   /** Brief once from the saved article, then one image per variant in parallel. */
   async function generateAi(variants: AiVariant[] = AI_VARIANTS) {
     const project = ref.current;
@@ -250,37 +368,30 @@ export function useStudio() {
         status: "generating",
         requestId: requests[v],
         error: undefined,
+        code: undefined,
         blocked: false,
+        since: undefined,
+        misses: 0,
       });
     let briefId: string;
+    let operationId: string;
     try {
       const current = await flush();
-      const hash = sourceHash(current);
-      const known = aiRef.current;
-      if (
-        known?.projectId === projectId &&
-        known.briefId &&
-        known.briefHash === hash
-      )
-        briefId = known.briefId;
-      else {
-        const brief = await api(
-          `/projects/${projectId}/ai-background/brief`,
-          "POST",
-          { expectedSourceHash: hash },
-        );
-        briefId = brief.briefId;
-        setAi(projectId, generation, (state) => ({
-          ...state,
-          briefId: brief.briefId,
-          briefHash: brief.sourceHash,
-        }));
-      }
+      // Every manual generate is a new server operation; a cached brief is
+      // answered without a paid call.
+      const brief = await api(
+        `/projects/${projectId}/ai-background/brief`,
+        "POST",
+        { expectedSourceHash: sourceHash(current), variants },
+      );
+      briefId = brief.briefId;
+      operationId = brief.operationId;
     } catch (e) {
       for (const v of variants)
         setSlot(projectId, generation, v, requests[v], {
           status: "failed",
           error: (e as Error).message,
+          code: (e as any).code,
         });
       return;
     }
@@ -290,22 +401,26 @@ export function useStudio() {
           const candidate: AiCandidate = await api(
             `/projects/${projectId}/ai-background`,
             "POST",
-            { briefId, variant },
+            { briefId, variant, operationId },
           );
           setSlot(projectId, generation, variant, requests[variant], {
             status: "done",
             candidate,
           });
         } catch (e) {
-          if ((e as any).code === "AI_BRIEF_MISSING")
-            setAi(projectId, generation, (state) => ({
-              ...state,
-              briefId: undefined,
-              briefHash: undefined,
-            }));
+          // Already running on the server (e.g. started before a reload), or
+          // replaced by a newer generate in another window: follow that job
+          // instead of paying for a second one.
+          if (["AI_IN_PROGRESS", "AI_SUPERSEDED"].includes((e as any).code)) {
+            setSlot(projectId, generation, variant, requests[variant], {
+              since: (e as any).startedAt || new Date(0).toISOString(),
+            });
+            return;
+          }
           setSlot(projectId, generation, variant, requests[variant], {
             status: "failed",
             error: (e as Error).message,
+            code: (e as any).code,
             blocked: (e as any).code === "AI_BLOCKED",
           });
         }
@@ -364,10 +479,13 @@ export function useStudio() {
         notice +=
           "배경 적용됨. 표지만 다시 렌더했습니다. 내보내기 전에 전체 미리보기 갱신이 필요합니다.";
       } catch (e) {
-        throw new Error(
-          "배경은 적용됨, 표지 렌더 실패: " +
-            (e as Error).message +
-            " 미리보기 갱신으로 다시 렌더하세요.",
+        throw Object.assign(
+          new Error(
+            "배경은 적용됨, 표지 렌더 실패: " +
+              (e as Error).message +
+              " 미리보기 갱신으로 다시 렌더하세요.",
+          ),
+          { code: (e as any).code },
         );
       }
     });
@@ -460,7 +578,7 @@ export function useStudio() {
     if (!dirty || busy || saveBlocked.current || autosavePaused.current) return;
     const timer = setTimeout(() => {
       if (!busyRef.current && !autosavePaused.current)
-        flush().catch((e) => setError(e.message));
+        flush().catch((e) => setError(e.message, e.code));
     }, 650);
     return () => clearTimeout(timer);
   }, [committed, dirty, busy]);
@@ -473,7 +591,7 @@ export function useStudio() {
       await fn();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setError((e as Error).message, (e as any).code);
       const offered = (e as any).suggestions;
       if (Array.isArray(offered)) setHeadlineSuggestions(offered);
       return false;
@@ -580,10 +698,13 @@ export function useStudio() {
             );
             setIndex(0);
           } catch (e) {
-            throw new Error(
-              "문안 생성·저장은 완료했습니다. 이미지 렌더 실패: " +
-                (e as Error).message +
-                " 02 문안·사진 편집에서 수정 후 미리보기 갱신을 눌러 주세요.",
+            throw Object.assign(
+              new Error(
+                "문안 생성·저장은 완료했습니다. 이미지 렌더 실패: " +
+                  (e as Error).message +
+                  " 02 문안·사진 편집에서 수정 후 미리보기 갱신을 눌러 주세요.",
+              ),
+              { code: (e as any).code },
             );
           }
         }
@@ -704,6 +825,7 @@ export function useStudio() {
     setTab,
     busy,
     error,
+    errorCode,
     setError,
     saved,
     dirty,

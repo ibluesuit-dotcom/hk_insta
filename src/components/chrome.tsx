@@ -52,13 +52,28 @@ export function Rail({
 
 /** Error alert with local-draft download and conflict recovery actions. */
 export function ErrorBanner({ s }: { s: Studio }) {
-  const { error, setError, p, ref, draftsRef, saveBlocked, run, accept } = s;
+  const {
+    error,
+    errorCode,
+    setError,
+    p,
+    ref,
+    draftsRef,
+    saveBlocked,
+    run,
+    accept,
+  } = s;
   if (!error) return null;
   return (
     <div role="alert" className="error">
       <div>
         <strong>처리를 완료하지 못했습니다</strong>
         <p>{error}</p>
+        {errorCode && (
+          <small className="error-code" title="진단 코드">
+            진단 코드 {errorCode}
+          </small>
+        )}
         <small>
           입력·설정을 확인한 뒤 해당 작업을 다시 실행하세요. 작성 내용은
           유지됩니다.

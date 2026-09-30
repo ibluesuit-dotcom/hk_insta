@@ -37,6 +37,34 @@ export function validateProject(body: unknown): Project {
   return migrateCover(projectSchema.parse(body));
 }
 
+// Network codes of an unreachable address (fetch puts them on `cause`).
+const unreachable = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+]);
+export const unreachableAddress = (error: any) =>
+  unreachable.has(error?.code) || unreachable.has(error?.cause?.code);
+
+/** The Korean message an editor sees; never a path or an English internal. */
+export function publicMessage(error: any): string {
+  return error instanceof z.ZodError
+    ? "입력 형식이 올바르지 않습니다. 문안·본문 장수·잠금·사진·폰트(54~60px)를 확인하세요."
+    : error?.code === "ENOENT"
+      ? "작업 또는 파일을 찾을 수 없습니다. 보관함을 확인하세요."
+      : error?.code === "LIMIT_FILE_SIZE"
+        ? "파일 용량 제한을 초과했습니다 (원문 10MB, 사진 25MB)."
+        : unreachableAddress(error)
+          ? "주소에 접속할 수 없습니다. URL을 확인하세요."
+          : typeof error?.message === "string" &&
+              /[가-힣]/.test(error.message) &&
+              !/\/(Users|home|private|tmp)\//.test(error.message)
+            ? error.message
+            : "처리하지 못했습니다. 입력 파일과 설정을 확인하고 다시 시도하세요.";
+}
+
 export const errorHandler: ErrorRequestHandler = (
   error: any,
   _req,
@@ -48,16 +76,8 @@ export const errorHandler: ErrorRequestHandler = (
     ...(Array.isArray(error.suggestions) && error.suggestions.length
       ? { suggestions: error.suggestions }
       : {}),
-    message:
-      error instanceof z.ZodError
-        ? "입력 형식이 올바르지 않습니다. 문안·본문 장수·잠금·사진·폰트(54~60px)를 확인하세요."
-        : error.code === "ENOENT"
-          ? "작업 또는 파일을 찾을 수 없습니다. 보관함을 확인하세요."
-          : error.code === "LIMIT_FILE_SIZE"
-            ? "파일 용량 제한을 초과했습니다 (원문 10MB, 사진 25MB)."
-            : typeof error.message === "string" &&
-                /[가-힣]/.test(error.message) &&
-                !/\/(Users|home|private|tmp)\//.test(error.message)
-              ? error.message
-              : "처리하지 못했습니다. 입력 파일과 설정을 확인하고 다시 시도하세요.",
+    ...(typeof error.startedAt === "string"
+      ? { startedAt: error.startedAt }
+      : {}),
+    message: publicMessage(error),
   });

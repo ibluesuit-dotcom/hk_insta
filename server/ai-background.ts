@@ -137,6 +137,7 @@ export const briefInstructions = `당신은 Instagram 뉴스카드의 이미지 
 기사에 있는 사실과 주장·전망·혐의를 구분한다. 본문이 없는 정보는 추가하지 않는다.
 제목과 본문이 충돌하면 needs_review로 표시한다. 본문이 없으면 body_missing을 표시하고 제목 수준의 일반적 소재만 고른다.
 title_truncated 또는 body_truncated가 true이면 해당 값은 앞부분만 제공된 것이다.
+재난·수사·재판 기사에서 일반 장면이 실제 현장·압수물·파손 방식처럼 읽힐 위험이 남으면 그 위험을 review_reason에 적고 needs_review로 표시한다. 실존 인물 이름이 있다는 이유만으로 needs_review로 표시하지 않는다.
 
 [공통 소재 선택]
 1. 기사 핵심을 한 문장으로 정리한다.
@@ -146,6 +147,8 @@ title_truncated 또는 body_truncated가 true이면 해당 값은 앞부분만 �
 5. 관련성의 근거가 된 본문 문구를 정확히 인용한다. 본문이 없으면 제목의 해당 문구를 사용한다.
 6. 재료를 많이 넣는 것보다 대표 피사체가 명확한 하나의 구도를 우선한다.
 7. 기사 수치·날짜·기관명은 의미 파악용으로만 사용하고 이미지에 그대로 쓰게 하지 않는다.
+8. 기사에 명시된 국가·지역·관할과 주택·시설의 유형은 일반 장면에도 보존한다. 특정 현장이나 기관 외관을 복제하지 않되, 다른 국가의 국기·국장·법정 상징으로 대체하지 않는다. 지역을 판단할 근거가 없으면 국가 상징을 넣지 않고, 지역 적합성을 판단하기 어려우면 needs_review와 그 이유를 쓴다.
+9. 날짜·연휴·계절이 기사에서 시점에 불과하면 선물·명절 장식·계절 소품을 장면에 넣지 않는다. 축제·명절 자체가 핵심 주제일 때만 그 문화의 정확한 대상을 쓴다.
 
 [후보 A: 사진형]
 - 기사와 관련된 일상적이고 현실적인 장면을 드라이하게 보여준다.
@@ -155,6 +158,8 @@ title_truncated 또는 body_truncated가 true이면 해당 값은 앞부분만 �
 - 과장 없는 시점, 중립적인 색, 일반적인 주광, 현실적인 재질과 원근을 사용한다.
 - 데이터, 숫자, 차트, 그래프, 전광판, 시세판, 정보 화면은 장면에 넣지 않는다. 가짜 또는 흐린 데이터로 대체하지 않는다.
 - 글자·간판·로고가 없어도 성립하는 구도를 먼저 고른다. 모든 물건을 장난감처럼 매끈하게 만들지 말고, 도장·접합부·마모 등 실제 재질은 유지한다.
+- 매장에서는 상업용 포장·진열 박스·카드 제품 로고가 보이지 않는 각도를 우선한다. 흐림 처리만으로 무문자를 충족했다고 보지 않는다.
+- 전자부품·회로기판은 저항 코드·실크스크린·일련번호·작은 부품 표식이 보이지 않는 패키지와 각도를 고르고, 납땜 접합부와 실제 재질은 유지한다.
 - 사람이 꼭 필요하지 않으면 사물/공간으로 충분하다. 사람이 필요하면 기사에 없는 감정이나 행동을 연출하지 않고 식별 불가능한 일반 배경 인물로 제한한다.
 - 실제 인물, 사건, 회사 시설, 제품의 정확한 재현이 필요한 경우 일반 장면으로 대체 가능한지 판단하고 불가능하면 needs_review로 표시한다.
 
@@ -166,6 +171,8 @@ title_truncated 또는 body_truncated가 true이면 해당 값은 앞부분만 �
 - 전망을 확정으로, 둔화를 붕괴로, 규제 논의를 범죄로 바꾸지 않는다. 사설의 평가를 객관적 사실처럼 시각화하지 않는다.
 - 기본값은 명확한 실루엣, 적은 수의 요소, 절제된 색상과 질감이다. 네온·유광·불꽃·동전더미·거대 화살표·휴머노이드 얼굴을 장식용으로 넣지 않는다.
 - 특정 작가 이름이나 특정 언론사 화풍 복제 대신 시각적 특성을 설명한다.
+- 사진형과 같이 명판·안내판·간판은 장면에서 뺀다. 일러스트라도 글자가 보이는 표지는 무문자 조건 위반이다.
+- 특정 상품군·캐릭터·카드 뒷면·엠블럼·포장 디자인을 닮게 그리지 않고 무늬 없는 표면이나 단순한 추상 무늬를 쓴다.
 
 [공통 화면 조건]
 - 입력 aspect_ratio를 따르고 주요 피사체는 카드 글자와 겹치지 않는 영역에 배치한다.
@@ -175,7 +182,7 @@ title_truncated 또는 body_truncated가 true이면 해당 값은 앞부분만 �
 
 [출력]
 완성 프롬프트는 쓰지 않는다. 서버가 고정된 영어 템플릿에 아래 슬롯을 끼워 넣는다.
-영어 슬롯은 템플릿 문장 안에 그대로 들어가도 자연스러운 짧은 영어 구나 한두 문장으로 쓴다. 슬롯에 글자·숫자·로고·기관명·국가명을 그리라는 지시를 넣지 않는다. 각 값은 400자 이내.
+영어 슬롯은 템플릿 문장 안에 그대로 들어가도 자연스러운 짧은 영어 구나 한두 문장으로 쓴다. 슬롯에 글자·숫자·로고·기관명·국가명을 그리라는 지시를 넣지 않는다. 이는 문자 표기를 금지하는 뜻이며 장면의 국가·관할·주택유형 맥락을 생략하라는 뜻이 아니다. 각 값은 400자 이내.
 화면 비율(4:5·세로), 상단·중단 배치, 하단 30%, 조명·색보정, 낮은 디테일, 무문자 같은 공통 조건은 템플릿이 이미 넣는다. 슬롯에 이런 조건이나 비율·퍼센트를 다시 쓰지 말고, 각 슬롯이 맡은 내용만 쓴다. 슬롯 끝에 마침표를 붙이지 않는다.
 article_summary: 한국어 한 문장
 evidence_quote: 입력 기사에서 그대로 가져온 연속 문구. 본문이 있으면 본문에서, 없으면 제목에서
@@ -185,7 +192,7 @@ review_reason: 없으면 null, 있으면 한국어 한 문장
 photo.subject: 한국어 소재
 photo.relation_type: direct(기사에 직접 등장) 또는 contextual(편집자가 고른 일반 관련 소재)
 photo.selection_reason: 한국어, 기사와 연결되는 이유
-photo.generic_setting: 영어 명사구. 피사체와 그 일반적인 장소만, 조명 제외 (예: stacked shipping containers at an ordinary container port)
+photo.generic_setting: 영어 명사구. 피사체와 그 일반적인 장소만, 조명 제외. 기사에서 확인되는 국가·지역·주택/시설 유형은 유지한다 (예: stacked shipping containers at an ordinary container port; a typical South Korean high-rise apartment complex)
 photo.visible_details: 영어. 눈에 보이는 구체적 사물·재질 한두 문장
 photo.viewpoint: 영어 명사구. "Use ___," 뒤에 들어가는 과장 없는 시점만, 구도·배치 제외 (예: a modest elevated viewpoint)
 photo.simple_foreground: 영어 짧은 명사구. "continue naturally as ___" 뒤에 들어가는 단순한 전경 표면만 (예: a plain concrete quay)
@@ -194,7 +201,7 @@ art.subject: 한국어 소재
 art.style: flat_editorial, restrained_collage, matte_3d, scene_illustration 중 하나. art_style이 auto가 아니면 그 값
 art.metaphor: 기본 null. 필요한 경우만 한국어 설명
 art.selection_reason: 한국어, 표현 선택 이유
-art.plain_topic: 영어. 기사 주제를 평이하게
+art.plain_topic: 영어로 핵심 산업·행위만 평이하게 요약한다. 기사에서 시점에 불과한 날짜·연휴·계절은 제외한다. 축제·명절 자체가 핵심 주제일 때만 정확한 문화적 대상을 명시하며 holiday 같은 모호한 번역을 쓰지 않는다 (예: retail investment in technology and semiconductor companies)
 art.subject_and_scene: 영어. 그릴 소재와 장면
 art.visual_description: 영어 한두 문장. 구성 요소·서로의 배치·색을 구체적으로, 화면 비율·하단 여백 제외
 art.relationship: 영어. metaphor를 쓸 때만 기사에 근거한 관계 한 문장, 아니면 null
@@ -251,6 +258,15 @@ const STYLE_TEXT: Record<Brief["art"]["style"], string> = {
   matte_3d: "simple matte 3D objects with soft, even lighting",
   scene_illustration: "a concise scene illustration with simple drawn forms",
 };
+// Timing in the article (a holiday, a season) is not a reason for props.
+const ONLY_LISTED = `Depict only the objects explicitly listed in the scene description. Calendar
+timing alone must not introduce gifts, festive foliage, seasonal decorations,
+flags or institutional emblems unless explicitly required by the scene above.`;
+// Korean settings invite room plaques and signs; card shops invite brand look-alikes.
+const NO_SIGNS_OR_BRANDS = `Leave out signs, room plaques, nameplates and wall notices; any screen or panel
+stays blank, with no writing in any script, including Korean. Do not imitate a
+real product line, franchise character, card back, emblem or packaging design;
+use plain surfaces or simple abstract patterns instead.`;
 /** 00-prompts-v1 §3·§4 fixed templates with the brief's slots inserted. */
 export function buildPrompt(brief: Brief, variant: AiVariant): string {
   if (variant === "photo") {
@@ -268,11 +284,18 @@ crowding, emptiness, physical damage or unusually large quantities.
 Compose for ${ASPECT}. Keep the main subject clear in the upper and middle
 parts, with comfortable crop margins. Let the lower ${BOTTOM} continue
 naturally as ${clause(s.simple_foreground)}, with low visual detail so the app can overlay text.
+Keep all focal objects, including loose items and the edges of the main object,
+above the lower text-safe region; continue the same surface naturally below it.
 Produce one continuous photograph-like scene, not a poster, banner or split layout.
 
 Use ${clause(s.text_free_choices)}. Data displays, charts and graphs are
 outside the scene. Keep lettering, numerals, logos, labels and graphic overlays out
-of the image. Preserve realistic texture rather than replacing everything with
+of the image. For electronics, choose packages and viewing angles that keep resistor
+codes, PCB silkscreen, serial markings and tiny component labels out of view; in
+shops, choose angles that keep retail packaging and display-box logos out of view.
+${ONLY_LISTED}
+${NO_SIGNS_OR_BRANDS}
+Preserve realistic texture rather than replacing everything with
 featureless plastic. No cinematic effects or advertising-style embellishment.
 This is a generic AI-generated illustrative background, not a record of a specific
 real event or a particular company's facility.`;
@@ -289,6 +312,8 @@ not an advertisement, an infographic or a factual technical diagram.
 
 Compose for ${ASPECT} with the main subject in the upper and middle portions.
 The lower ${BOTTOM} continues as ${clause(s.simple_background)} with little detail.
+Keep all focal objects, including loose items and the edges of the main object,
+above the lower text-safe region; continue the same surface naturally below it.
 Keep the scene visually unified and leave comfortable margins for cropping.
 
 Represent the article's topic without inventing an event, a person's actions or a
@@ -296,6 +321,8 @@ new claim. Do not strengthen a forecast into a certainty. An ordinary subject
 illustration is sufficient; do not add a visual metaphor unless explicitly described
 above. Keep typography, numbers, logos, data charts, UI panels and decorative finance
 icons out of the image. All headline text and disclosure will be added by the app.
+${ONLY_LISTED}
+${NO_SIGNS_OR_BRANDS}
 This is a generic AI-generated illustrative background, not a record of a specific
 real event.`;
 }
@@ -700,8 +727,15 @@ export function candidate(s: Sidecar) {
     at: s.at,
   };
 }
-/** Latest completed candidate of each variant generated for this project. */
-export async function recentCandidates(projectId: string) {
+/**
+ * Latest completed candidate of each variant generated for this project.
+ * `include` names assets already known complete (from a progress snapshot
+ * taken first), so a listing racing a completion still returns them.
+ */
+export async function recentCandidates(
+  projectId: string,
+  include: Partial<Record<AiVariant, string>> = {},
+) {
   let names: string[] = [];
   try {
     names = await fs.readdir(assetsDir());
@@ -719,6 +753,15 @@ export async function recentCandidates(projectId: string) {
     if (s.projectId !== projectId) continue;
     const prior = latest[s.variant];
     if (!prior || prior.at < s.at) latest[s.variant] = s;
+  }
+  for (const [variant, assetId] of Object.entries(include)) {
+    if (latest[variant as AiVariant]?.assetId === assetId) continue;
+    try {
+      const s = await loadSidecar(assetId);
+      const prior = latest[s.variant];
+      if (s.projectId === projectId && (!prior || prior.at < s.at))
+        latest[s.variant] = s;
+    } catch {}
   }
   return {
     ...(latest.photo ? { photo: candidate(latest.photo) } : {}),
@@ -785,4 +828,225 @@ export async function generateBackground(
     b64,
     d,
   );
+}
+
+// ---------------------------------------------------------------- progress
+// One generation is one operation, issued by the brief request and carried
+// by its image requests; only a manual (re)generate starts a new one. Kept
+// in memory only: a restart forgets them, and a reloaded page then simply
+// sees no job. An image step ends when its handler settles, even if the
+// browser that started it has gone away.
+export const progressTiming = {
+  /** A finished brief keeps its variants running this long for the images. */
+  graceMs: Number(process.env.AI_BRIEF_GRACE_MS) || 30_000,
+  /** Ended operations are forgotten after this. */
+  keepMs: 60 * 60_000,
+};
+export type JobFailure = { code: string; message: string; at: string };
+type Step = {
+  stage: "brief" | "awaiting" | "image" | "done" | "failed" | "followed";
+  /** End of the grace while awaiting the image request. */
+  until?: number;
+  imageAt?: string;
+  assetId?: string;
+  failure?: JobFailure;
+};
+type Operation = {
+  id: string;
+  projectId: string;
+  seq: number;
+  startedAt: string;
+  steps: Partial<Record<AiVariant, Step>>;
+};
+const operations = new Map<string, Operation>();
+/** Latest started operation per project and variant. */
+const newest = new Map<string, Partial<Record<AiVariant, string>>>();
+/** Bumped on every change, so a reader can tell its view went stale. */
+const versions = new Map<string, number>();
+let seq = 0;
+const VARIANTS: AiVariant[] = ["photo", "art"];
+const bump = (projectId: string) =>
+  versions.set(projectId, (versions.get(projectId) || 0) + 1);
+const running = (step: Step, now = Date.now()) =>
+  step.stage === "brief" ||
+  step.stage === "image" ||
+  (step.stage === "awaiting" && now < step.until!);
+function forget() {
+  const old = Date.now() - progressTiming.keepMs;
+  for (const op of operations.values()) {
+    if (Date.parse(op.startedAt) > old) continue;
+    if (Object.values(op.steps).some((s) => s.stage === "image")) continue;
+    operations.delete(op.id);
+    const last = newest.get(op.projectId);
+    for (const v of VARIANTS)
+      if (last?.[v] === op.id) delete last[v];
+  }
+}
+function newOperation(projectId: string, variants: AiVariant[], step: Step) {
+  forget();
+  const op: Operation = {
+    id: randomUUID(),
+    projectId,
+    seq: ++seq,
+    startedAt: new Date().toISOString(),
+    steps: Object.fromEntries(variants.map((v) => [v, { ...step }])),
+  };
+  operations.set(op.id, op);
+  newest.set(projectId, {
+    ...newest.get(projectId),
+    ...Object.fromEntries(variants.map((v) => [v, op.id])),
+  });
+  bump(projectId);
+  return op;
+}
+/**
+ * A manual generate: the brief step for these variants. They show as
+ * running from now until the images end, or the grace after the brief
+ * passes without an image request (the page that asked went away).
+ */
+export function startOperation(
+  projectId: string,
+  variants: AiVariant[] = VARIANTS,
+) {
+  const op = newOperation(projectId, variants, { stage: "brief" });
+  return {
+    operationId: op.id,
+    end(error?: { code: string; message: string }) {
+      const at = new Date().toISOString();
+      for (const step of Object.values(op.steps)) {
+        if (step.stage !== "brief") continue;
+        if (error) Object.assign(step, { stage: "failed", failure: { ...error, at } });
+        else
+          Object.assign(step, {
+            stage: "awaiting",
+            until: Date.now() + progressTiming.graceMs,
+          });
+      }
+      bump(projectId);
+    },
+  };
+}
+const refuse = (message: string, code: string, extra = {}) =>
+  Object.assign(new Error(message), { code, status: 409, ...extra });
+/**
+ * Record a running image of an operation (or of a new one when the request
+ * names none). Checked and recorded with no await in between, before any
+ * usage is reserved: a late request of an operation a newer one replaced is
+ * 409 AI_SUPERSEDED, and a second image of the same project and variant is
+ * 409 AI_IN_PROGRESS.
+ */
+export function startImage(
+  projectId: string,
+  variant: AiVariant,
+  operationId?: string,
+) {
+  let op = operationId ? operations.get(operationId) : undefined;
+  if (operationId && (!op || op.projectId !== projectId || !op.steps[variant]))
+    throw refuse(
+      "이 생성 작업 기록이 없습니다. 다시 생성하세요.",
+      "AI_OPERATION_UNKNOWN",
+    );
+  const last = newest.get(projectId)?.[variant];
+  if (op && last !== op.id)
+    throw refuse(
+      "다른 창에서 새로 시작한 생성이 있어 이 요청은 건너뜁니다. 완료되면 자동으로 표시됩니다.",
+      "AI_SUPERSEDED",
+      { startedAt: operations.get(last!)?.startedAt },
+    );
+  for (const other of operations.values()) {
+    const step = other.steps[variant];
+    if (other.projectId !== projectId || step?.stage !== "image") continue;
+    if (op && op !== other) {
+      op.steps[variant]!.stage = "followed";
+      bump(projectId);
+    }
+    throw refuse(
+      "이미 이 이미지를 만들고 있습니다. 완료되면 자동으로 표시됩니다.",
+      "AI_IN_PROGRESS",
+      { startedAt: step.imageAt },
+    );
+  }
+  if (op && !["brief", "awaiting"].includes(op.steps[variant]!.stage))
+    throw refuse("이 생성 작업은 이미 끝났습니다.", "AI_OPERATION_DONE");
+  // 유예가 지난 작업은 다른 창이 이미 "중단"으로 판단했으므로, 늦게 도착한
+  // 이미지 요청을 비용 발생 전에 거절하고 실패로 확정해 모든 창이 같은 상태를 본다.
+  if (op) {
+    const waiting = op.steps[variant]!;
+    if (waiting.stage === "awaiting" && Date.now() >= waiting.until!) {
+      const message = "이 생성 작업은 시간이 지나 만료됐습니다. 다시 생성하세요.";
+      Object.assign(waiting, {
+        stage: "failed",
+        failure: { code: "AI_OPERATION_EXPIRED", message, at: new Date().toISOString() },
+      });
+      bump(projectId);
+      throw refuse(message, "AI_OPERATION_EXPIRED");
+    }
+  }
+  op ||= newOperation(projectId, [variant], { stage: "awaiting" });
+  const step = op.steps[variant]!;
+  Object.assign(step, { stage: "image", imageAt: new Date().toISOString() });
+  bump(projectId);
+  return {
+    startedAt: step.imageAt!,
+    /** Keep the outcome: the new asset, or the failure for a reloaded page. */
+    end(result: { assetId: string } | { error: { code: string; message: string } }) {
+      if ("assetId" in result)
+        Object.assign(step, { stage: "done", assetId: result.assetId });
+      else
+        Object.assign(step, {
+          stage: "failed",
+          failure: { ...result.error, at: new Date().toISOString() },
+        });
+      bump(projectId);
+    },
+  };
+}
+/**
+ * One consistent view of a project's operations: running variants (the
+ * union over running operations; image first, else brief; a replaced
+ * operation counts only for an image already running), and per variant
+ * the outcome of its latest operation, a new asset or a failure. A newer
+ * start clears an older outcome; an operation that followed another's
+ * running image leaves the outcome to that one.
+ */
+export function progress(projectId: string) {
+  const now = Date.now();
+  const ops = [...operations.values()]
+    .filter((op) => op.projectId === projectId)
+    .sort((a, b) => b.seq - a.seq);
+  const pending: Partial<
+    Record<AiVariant, { stage: "brief" | "image"; startedAt: string }>
+  > = {};
+  const failures: Partial<Record<AiVariant, JobFailure>> = {};
+  const done: Partial<Record<AiVariant, string>> = {};
+  for (const v of VARIANTS) {
+    for (const op of ops) {
+      const step = op.steps[v];
+      if (!step || !running(step, now)) continue;
+      // Waiting for images a newer operation replaced: they will be refused.
+      if (step.stage !== "image" && newest.get(projectId)?.[v] !== op.id)
+        continue;
+      const found =
+        step.stage === "image"
+          ? { stage: "image" as const, startedAt: step.imageAt! }
+          : { stage: "brief" as const, startedAt: op.startedAt };
+      const prior = pending[v];
+      if (
+        !prior ||
+        (found.stage === "image" && prior.stage === "brief") ||
+        (found.stage === prior.stage && found.startedAt < prior.startedAt)
+      )
+        pending[v] = found;
+    }
+    const last = ops.find((op) => op.steps[v] && op.steps[v]!.stage !== "followed");
+    const step = last?.steps[v];
+    if (step?.stage === "failed") failures[v] = step.failure!;
+    if (step?.stage === "done") done[v] = step.assetId!;
+  }
+  return {
+    version: versions.get(projectId) || 0,
+    pending,
+    failures,
+    done,
+  };
 }

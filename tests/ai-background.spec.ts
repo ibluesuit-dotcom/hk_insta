@@ -390,7 +390,12 @@ test("적용 성공 뒤 표지 렌더가 STALE 이면 적용됨·렌더 실패�
     .click();
   expect((await applied).ok()).toBe(true);
   await expect(page.locator(".error")).toContainText(
-    "배경은 적용됨, 표지 렌더 실패: STALE · 렌더 중 변경되어 이전 이미지는 적용하지 않았습니다. 미리보기 갱신으로 다시 렌더하세요.",
+    "배경은 적용됨, 표지 렌더 실패: 렌더 중 변경되어 이전 이미지는 적용하지 않았습니다. 미리보기 갱신으로 다시 렌더하세요.",
+  );
+  // The server code is a separate diagnostic detail, not part of the text.
+  await expect(page.locator(".error p")).not.toContainText("STALE");
+  await expect(page.locator(".error .error-code")).toHaveText(
+    "진단 코드 STALE",
   );
   await expect(page.locator(".progress")).toHaveCount(0);
   // Applied on the server; the cover render did not advance.
