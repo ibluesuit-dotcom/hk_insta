@@ -1717,3 +1717,32 @@ header h1 {
   flex-basis: 100%;
   margin: 0;
 }
+.photo-strip .thumb {
+  position: relative;
+}
+.photo-strip .thumb-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(11, 27, 43, 0.78);
+  color: white;
+  font-size: 15px;
+  line-height: 22px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.photo-strip .thumb:hover .thumb-remove,
+.photo-strip .thumb-remove:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .photo-strip .thumb-remove {
+    opacity: 1;
+  }
+}

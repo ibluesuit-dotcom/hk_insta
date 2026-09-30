@@ -185,3 +185,63 @@ test("frame card (1g): chosen for the photo post, title and 3-line summary typed
     "코스피가 사상 처음으로 9천선을 돌파했다",
   );
 });
+
+test("a photo thumbnail shows × on hover and removes that photo; the last one leaves a blank card", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await expect(page.getByLabel("통합 원문")).toBeVisible();
+  await page.getByRole("radio", { name: "사진 게시물" }).click();
+  await page.getByLabel("사진 추가").setInputFiles([photo, photo, photo]);
+  const thumbs = page.locator(".photo-strip .thumb");
+  await expect(thumbs).toHaveCount(3);
+  const id = await page.evaluate(() =>
+    sessionStorage.getItem("studio-project"),
+  );
+  const before = (await (await request.get(`/api/projects/${id}`)).json()).copy
+    .pages;
+
+  const remove = thumbs.nth(1).getByRole("button", { name: "사진 2 빼기" });
+  await expect(remove).toHaveCSS("opacity", "0");
+  await thumbs.nth(1).hover();
+  await expect(remove).toHaveCSS("opacity", "1");
+  await remove.click();
+  await expect(thumbs).toHaveCount(2);
+  await expect(page.getByText("사진 2/5장")).toBeVisible();
+  const after = (await (await request.get(`/api/projects/${id}`)).json()).copy
+    .pages;
+  expect(after.map((pg: any) => pg.id)).toEqual([before[0].id, before[2].id]);
+
+  // A photo with written text asks first.
+  await page.request.put(`/api/projects/${id}`, {
+    data: await (async () => {
+      const p = await (await request.get(`/api/projects/${id}`)).json();
+      p.copy.pages[0].photoCard.text = "쓴 글";
+      return p;
+    })(),
+  });
+  await page.reload();
+  let asked = "";
+  page.once("dialog", (d) => {
+    asked = d.message();
+    d.dismiss();
+  });
+  await thumbs.nth(0).hover();
+  await thumbs.nth(0).getByRole("button", { name: "사진 1 빼기" }).click();
+  expect(asked).toContain("쓴 글도 함께 빠집니다");
+  await expect(thumbs).toHaveCount(2);
+
+  page.on("dialog", (d) => d.accept());
+  for (const n of [2, 1]) {
+    await thumbs.nth(n - 1).hover();
+    await thumbs
+      .nth(n - 1)
+      .getByRole("button", { name: `사진 ${n} 빼기` })
+      .click();
+    await expect(thumbs).toHaveCount(n - 1);
+  }
+  const last = await (await request.get(`/api/projects/${id}`)).json();
+  expect(last.count).toBe(1);
+  expect(last.copy.pages[0].kind ?? "text").toBe("text");
+});

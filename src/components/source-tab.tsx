@@ -437,17 +437,41 @@ function PhotoPostFields({ s }: { s: Studio }) {
       </div>
       {photos.length > 0 && (
         <div className="photo-strip">
-          {photos.map((pg, i) => (
-            <img
-              key={pg.id ?? i}
-              src={pg.photoCard!.photo}
-              alt={`사진 ${i + 1}`}
-            />
-          ))}
+          {photos.map((pg, i) => {
+            const card = pg.photoCard!;
+            const written = [card.text, card.title, card.summary].some((t) =>
+              t?.trim(),
+            );
+            return (
+              <div className="thumb" key={pg.id ?? i}>
+                <img src={card.photo} alt={`사진 ${i + 1}`} />
+                <button
+                  type="button"
+                  className="thumb-remove"
+                  aria-label={`사진 ${i + 1} 빼기`}
+                  title="이 사진 빼기"
+                  disabled={!!busy}
+                  onClick={() => {
+                    if (
+                      written &&
+                      !window.confirm(
+                        `사진 ${i + 1}에 쓴 글도 함께 빠집니다. 뺄까요? 이전 버전에서 복원할 수 있습니다.`,
+                      )
+                    )
+                      return;
+                    s.deleteCard(p.copy.pages.indexOf(pg));
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
       <small className="hint">
-        순서 바꾸기·삭제·사진별 글은 02 문안·사진 편집에서 합니다.
+        사진에 마우스를 올려 ×로 뺄 수 있습니다. 순서 바꾸기·사진별 글은 02
+        문안·사진 편집에서 합니다.
         {texts > 0 ? ` 텍스트 카드 ${texts}장도 함께 있습니다.` : ""}
       </small>
     </div>

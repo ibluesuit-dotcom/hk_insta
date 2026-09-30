@@ -1059,7 +1059,14 @@ export function useStudio() {
   }
   async function deleteCard(i: number) {
     const ok = await saveCardChange("카드 삭제 중", [], (p) => {
-      removePage(p, i);
+      // The last card cannot go: it becomes a blank text card instead, which
+      // the next photo upload replaces.
+      if (p.count > 1) removePage(p, i);
+      else {
+        keepPages(p, []);
+        p.copy.pages.push(emptyPage());
+        p.count = 1;
+      }
     });
     if (ok) setIndex(Math.min(i + 1, ref.current!.count));
   }
