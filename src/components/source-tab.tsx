@@ -46,6 +46,7 @@ export function SourceTab({ s }: { s: Studio }) {
                   sourceSubtitle: r.subtitle,
                   publishedAt: r.publishedAt,
                   sourceConfirmed: false,
+                  sourceFromUrl: true,
                 }),
                 true,
               );
@@ -192,6 +193,8 @@ export function SourceTab({ s }: { s: Studio }) {
                     .map((f) => f.text)
                     .join("\n\n"),
                   sourceConfirmed: false,
+                  // The source is now the files only.
+                  sourceFromUrl: false,
                 }))
               }
             >
@@ -224,6 +227,7 @@ export function SourceTab({ s }: { s: Studio }) {
             ...p,
             source: e.target.value,
             sourceConfirmed: false,
+            sourceFromUrl: e.target.value.trim() ? p.sourceFromUrl : false,
           }))
         }
         placeholder="기사 본문이나 방송 스크립트를 붙여넣으세요. 숫자, 시점, 조건이 빠지지 않았는지 확인하세요."
@@ -348,6 +352,22 @@ function PhotoPostFields({ s }: { s: Studio }) {
     (pg) => !isPhotoPage(pg) && !blankTextPage(pg),
   ).length;
   const room = PHOTO_POST_LIMIT - photos.length;
+  // What the photos actually output: all captions shown, all hidden, or mixed.
+  const shown = photos.map((pg) => !!pg.photoCard?.textVisible);
+  const textState = !shown.length
+    ? !!p.photoText
+    : shown.every(Boolean)
+      ? true
+      : shown.some(Boolean)
+        ? null
+        : false;
+  const upload = (files: File[]) => {
+    if (files.length > room)
+      s.setError(
+        `사진은 표지 외 ${PHOTO_POST_LIMIT}장까지입니다. ${room}장만 더 올릴 수 있습니다.`,
+      );
+    else s.addPhotoCards(files);
+  };
   return (
     <div className="photo-post">
       <strong>사진 아래 글</strong>
@@ -361,8 +381,8 @@ function PhotoPostFields({ s }: { s: Studio }) {
           <button
             key={label}
             role="radio"
-            aria-checked={!!p.photoText === on}
-            className={!!p.photoText === on ? "selected" : ""}
+            aria-checked={textState === on}
+            className={textState === on ? "selected" : ""}
             disabled={!!busy}
             onClick={() => s.setPhotoText(on)}
           >
@@ -370,44 +390,54 @@ function PhotoPostFields({ s }: { s: Studio }) {
           </button>
         ))}
       </div>
-      {p.photoText && (
+      {textState === null && (
+        <small className="hint">
+          사진마다 글 표시가 다릅니다. 하나를 고르면 모든 사진에 같이
+          적용됩니다.
+        </small>
+      )}
+      {textState === true && (
         <small className="hint">
           사진마다 아래에 넣을 글(최대 100자·3줄)은 02 문안·사진 편집에서 직접
           씁니다.
         </small>
       )}
       <div
-        className="drop"
+        className="photo-add"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          s.addPhotoCards(Array.from(e.dataTransfer.files).slice(0, room));
+          upload(Array.from(e.dataTransfer.files));
         }}
       >
-        <span>▧</span>
-        <strong>
-          {photos.length ? "본문 사진 더 올리기" : "본문 사진 올리기"}
-        </strong>
-        <small>
-          여러 장을 한 번에 고를 수 있습니다 · 사진 {photos.length}/
-          {PHOTO_POST_LIMIT}장(표지 외)
+        <label
+          className={`file-pick primary ${busy || room <= 0 ? "disabled" : ""}`}
+        >
+          ＋ 사진 추가
+          <input
+            aria-label="사진 추가"
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            disabled={!!busy || room <= 0}
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = "";
+              upload(files);
+            }}
+          />
+        </label>
+        <span>
+          <b>
+            사진 {photos.length}/{PHOTO_POST_LIMIT}장
+          </b>{" "}
+          (표지 외)
+        </span>
+        <small className="hint">
+          {room > 0
+            ? "여러 장을 한 번에 고르거나 여기에 끌어다 놓으세요 · JPG·PNG·WebP"
+            : "사진을 모두 채웠습니다. 바꾸려면 02 편집에서 삭제하세요."}
         </small>
-        <input
-          aria-label="본문 사진 올리기"
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp"
-          disabled={!!busy || room <= 0}
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            e.target.value = "";
-            if (files.length > room)
-              s.setError(
-                `사진은 표지 외 ${PHOTO_POST_LIMIT}장까지입니다. ${room}장만 더 올릴 수 있습니다.`,
-              );
-            else s.addPhotoCards(files);
-          }}
-        />
       </div>
       {photos.length > 0 && (
         <div className="photo-strip">

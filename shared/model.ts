@@ -113,6 +113,8 @@ export interface Project {
    */
   postType?: "summary" | "photo";
   photoText?: boolean;
+  /** The loaded URL article is part of the source (not just typed in). */
+  sourceFromUrl?: boolean;
   profile: string;
   profilePhoto: string;
   status: string;
@@ -356,6 +358,7 @@ export const projectSchema = z
     postText: postTextSchema.optional(),
     postType: z.enum(["summary", "photo"]).optional(),
     photoText: z.boolean().optional(),
+    sourceFromUrl: z.boolean().optional(),
     profile: draftText,
     profilePhoto: uploadPath,
     status: z.enum([
@@ -480,12 +483,33 @@ function canonical(value: unknown): string {
 export const isPhotoPage = (page: Page) => page.kind === "photo";
 export const photoLimit = (p: Pick<Project, "postType">) =>
   p.postType === "photo" ? PHOTO_POST_LIMIT : PHOTO_CARD_LIMIT;
-/** A text card nobody wrote in yet (a new project starts with one). */
-export const blankTextPage = (page: Page) =>
+/**
+ * A text card nobody wrote in yet (a new project starts with one): every
+ * field empty, no stored photo and no lock.
+ */
+export const blankTextPage = (page: Page, locked = false) =>
+  !locked &&
   !isPhotoPage(page) &&
-  !page.title.trim() &&
-  !page.body.trim() &&
-  !page.photoCard;
+  !page.photoCard &&
+  !page.evidence.length &&
+  [page.role, page.title, page.body, page.highlight, page.alt].every(
+    (v) => !v.trim(),
+  );
+/** Keeps the listed following cards in order; their locks follow them. */
+export function keepPages(p: Project, keep: number[]) {
+  const locks: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(p.locks)) {
+    if (!k.startsWith("page:")) locks[k] = v;
+    else {
+      const j = keep.indexOf(Number(k.slice(5)));
+      if (j >= 0) locks[`page:${j}`] = v;
+    }
+  }
+  p.copy.pages = keep.map((i) => p.copy.pages[i]);
+  p.locks = locks;
+  p.count = p.copy.pages.length;
+  return p;
+}
 export const photoPageCount = (p: Project) =>
   p.copy.pages.filter(isPhotoPage).length;
 /** File/label kind of output card i: 0 is the cover. */

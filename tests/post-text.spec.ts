@@ -231,6 +231,7 @@ test("candidate rules: project, revision, source, lock, failed check, one articl
   // A loaded URL article plus one attachment is two articles.
   await put((p) => {
     p.sourceUrl = "https://example.com/a";
+    p.sourceFromUrl = true;
     p.attachments = [{ name: "b.txt", text: "둘째 기사" }];
   });
   const mixed = await request.post(

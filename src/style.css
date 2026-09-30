@@ -1694,3 +1694,26 @@ header h1 {
 .post-type {
   margin: 0 0 18px;
 }
+.photo-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed #becbc5;
+  border-radius: 7px;
+  background: #f8faf7;
+}
+.photo-add .file-pick {
+  padding: 9px 16px;
+  font-weight: 700;
+}
+.photo-add .file-pick.primary {
+  background: #c8102e;
+  border-color: #c8102e;
+  color: white;
+}
+.photo-add .hint {
+  flex-basis: 100%;
+  margin: 0;
+}

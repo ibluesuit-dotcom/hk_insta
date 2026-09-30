@@ -50,7 +50,12 @@ generateRouter.post(
       });
     // Only active text cards are written by AI. Photo cards (and the text
     // kept behind them) are refused up front or left out of the request.
-    const { view, map } = textView(p);
+    // A photo post's AI writes the cover only: text cards left over from a
+    // summary post keep what the editor wrote.
+    const { view, map } =
+      p.postType === "photo" && scope === "all"
+        ? textView({ ...p, copy: { ...p.copy, pages: [] } })
+        : textView(p);
     let viewScope = scope;
     if (scope.startsWith("page:")) {
       const page = p.copy.pages[Number(scope.slice(5))];

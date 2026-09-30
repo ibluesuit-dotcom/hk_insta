@@ -5,6 +5,7 @@ import {
   PHOTO_CARD_LIMIT,
   Project,
   blankTextPage,
+  keepPages,
   photoLimit,
   emptyPage,
   isPhotoPage,
@@ -968,8 +969,11 @@ export function useStudio() {
    */
   async function addPhotoCards(files: File[]) {
     if (!files.length) return;
+    const blank =
+      (p: Project) => (pg: Project["copy"]["pages"][number], i: number) =>
+        blankTextPage(pg, !!p.locks[`page:${i}`]);
     const room = (p: Project) => {
-      const blanks = p.copy.pages.filter(blankTextPage).length;
+      const blanks = p.copy.pages.filter(blank(p)).length;
       if (p.count - blanks + files.length > 8)
         throw new Error("카드는 표지 외 최대 8장입니다.");
       photoRoom(p, files.length);
@@ -978,19 +982,18 @@ export function useStudio() {
       files.length > 1 ? `사진 ${files.length}장 추가 중` : "사진 카드 추가 중",
       files,
       (p, photos) => {
-        const pages = p.copy.pages.filter((pg) => !blankTextPage(pg));
-        const removed = p.copy.pages.flatMap((pg, i) =>
-          blankTextPage(pg) ? [i] : [],
+        const isBlank = blank(p);
+        keepPages(
+          p,
+          p.copy.pages.flatMap((pg, i) => (isBlank(pg, i) ? [] : [i])),
         );
-        for (const i of removed.reverse()) removePage(p, i);
-        p.copy.pages = [
-          ...pages,
+        p.copy.pages.push(
           ...photos.map((photo) => ({
             ...emptyPage(),
             kind: "photo" as const,
             photoCard: newPhotoCard(photo, undefined, !!p.photoText),
           })),
-        ];
+        );
         p.count = p.copy.pages.length;
       },
       room,
@@ -1010,7 +1013,16 @@ export function useStudio() {
       );
       return;
     }
-    edit((p) => ({ ...p, postType }));
+    edit((p) => {
+      p.postType = postType;
+      // Photo cards that already show captions keep them: the post-level
+      // choice starts from what the cards actually output.
+      if (postType === "photo")
+        p.photoText = p.copy.pages.some(
+          (pg) => isPhotoPage(pg) && pg.photoCard?.textVisible,
+        );
+      return p;
+    });
   }
   /** "이미지만" / "이미지 + 글": shows or hides every photo card's caption. */
   function setPhotoText(on: boolean) {

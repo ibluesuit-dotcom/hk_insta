@@ -8,6 +8,8 @@ import {
   expandTextCopy,
   mergeCopy,
   projectSchema,
+  blankTextPage,
+  keepPages,
   removePage,
   textView,
   type Page,
@@ -142,4 +144,18 @@ test("a photo card renders the photo only; text cards number among text cards", 
   p.copy.pages[1].photoCard!.textVisible = false;
   assert.doesNotMatch(html(p, 2, "", "x"), /사진 &lt;문구/);
   assert.match(html(p, 3, "", "x"), /본문 2\/2/);
+});
+
+test("only an untouched, unlocked text card counts as blank; kept cards keep their locks", () => {
+  assert.equal(blankTextPage(emptyPage()), true);
+  assert.equal(blankTextPage({ ...emptyPage(), role: "배경" }), false);
+  assert.equal(blankTextPage({ ...emptyPage(), alt: "설명" }), false);
+  assert.equal(blankTextPage(emptyPage(), true), false);
+  const p = mixed();
+  p.locks = { "page:0": true, "page:2": true, kicker: true };
+  keepPages(p, [2]);
+  assert.equal(p.count, 1);
+  assert.deepEqual(p.locks, { "page:0": true, kicker: true });
+  keepPages(p, []);
+  assert.deepEqual(p.locks, { kicker: true });
 });
