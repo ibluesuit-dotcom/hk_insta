@@ -66,7 +66,7 @@ test("all visible and hidden edits save together, actual lines persist, export h
   await setup(page);
   const original = await generate(page);
   await expect(
-    page.getByRole("button", { name: /03|승인|현재 카드만/ }),
+    page.getByRole("button", { name: /03(?!인스타 게시글)|승인|현재 카드만/ }),
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: / 수정$/ })).toHaveCount(0);
   await expect(

@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { Project, migrateCover } from "../shared/model";
 export const root = path.resolve(process.env.DATA_DIR || "data");
 export async function initStore() {
@@ -27,7 +28,16 @@ export async function save(p: Project, expected: number, label = "자동 저장"
   let old;
   try {
     old = await read(p.id);
-  } catch {}
+  } catch (error: any) {
+    // Only a missing file means a new project; anything else would overwrite history.
+    if (error?.code !== "ENOENT")
+      throw Object.assign(
+        new Error(
+          "저장된 작업 파일을 읽지 못해 저장을 중단했습니다. 기존 기록을 보호하기 위해 덮어쓰지 않았습니다.",
+        ),
+        { code: "CORRUPT", status: 500 },
+      );
+  }
   if (old && old.current.revision !== expected)
     throw Object.assign(
       new Error(
@@ -35,8 +45,15 @@ export async function save(p: Project, expected: number, label = "자동 저장"
       ),
       { code: "CONFLICT", status: 409 },
     );
+  // Every following card gets a stable ID the first time it is saved.
   p = {
     ...p,
+    copy: {
+      ...p.copy,
+      pages: p.copy.pages.map((page) =>
+        page.id ? page : { ...page, id: randomUUID().slice(0, 8) },
+      ),
+    },
     revision: (old?.current.revision || 0) + 1,
     updatedAt: new Date().toISOString(),
   };

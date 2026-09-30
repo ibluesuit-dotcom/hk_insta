@@ -1789,3 +1789,45 @@ test("bg-5 instructions keep text and marks out without narrowing subjects", () 
       /arrows, icons, diagram marks and other symbols/,
     );
 });
+
+test("usage: post text limits, their own minute window and old usage files", async () => {
+  await fs.rm(usage.usageFile(), { force: true });
+  // A file written before post limits existed still reads.
+  await fs.writeFile(
+    usage.usageFile(),
+    JSON.stringify({
+      days: { [today()]: { briefs: 1, images: 2 } },
+      recentImages: [],
+    }),
+  );
+  process.env.AI_POST_PER_MINUTE = "3";
+  process.env.AI_DAILY_POST_TEXT_LIMIT = "3";
+  try {
+    const t = Date.now();
+    await usage.reserve("postText", t);
+    await usage.reserve("postVerify", t + 1);
+    await usage.reserve("postText", t + 2);
+    await assert.rejects(
+      usage.reserve("postVerify", t + 3),
+      (e: any) => e.code === "AI_RATE",
+    );
+    // Images are counted separately.
+    await usage.reserve("image", t + 4);
+    await usage.reserve("postText", t + 61_000);
+    await assert.rejects(
+      usage.reserve("postText", t + 62_000),
+      (e: any) => e.code === "AI_LIMIT",
+    );
+    const saved = JSON.parse(await fs.readFile(usage.usageFile(), "utf8"));
+    assert.deepEqual(saved.days[today()], {
+      briefs: 1,
+      images: 3,
+      postTexts: 3,
+      postVerifies: 1,
+    });
+  } finally {
+    process.env.AI_POST_PER_MINUTE = "1000";
+    process.env.AI_DAILY_POST_TEXT_LIMIT = "1000";
+    await fs.rm(usage.usageFile(), { force: true });
+  }
+});

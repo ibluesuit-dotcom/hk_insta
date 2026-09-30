@@ -88,3 +88,25 @@ test("recommendations accept only unique grounded words, never pad insufficient 
     0,
   );
 });
+test("caption and its lock are post-only; other copy and locks are card changes", () => {
+  const p = blank();
+  p.locks = { headline: true };
+  const withCopy = (copy: Partial<typeof p.copy>) => ({
+    ...p,
+    copy: { ...p.copy, ...copy },
+  });
+  assert.equal(profileOnlyChange(p, withCopy({ caption: "새 캡션" })), true);
+  assert.equal(
+    profileOnlyChange(p, { ...p, locks: { caption: true, headline: true } }),
+    true,
+  );
+  assert.equal(profileOnlyChange(p, withCopy({ alt: "표지 설명" })), false);
+  assert.equal(profileOnlyChange(p, withCopy({ kicker: "부제" })), false);
+  assert.equal(profileOnlyChange(p, { ...p, locks: {} }), false);
+});
+test("card comparison ignores key order from stored JSON", () => {
+  const p = blank();
+  const { headline, ...rest } = p.copy;
+  const reordered = { ...p, copy: { ...rest, headline } };
+  assert.equal(profileOnlyChange(p, reordered), true);
+});

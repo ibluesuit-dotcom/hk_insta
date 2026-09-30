@@ -7,7 +7,18 @@ import { read, save, mutate, root } from "../store";
 import { render } from "../render";
 import { wrap } from "../http";
 import { isAiBackground } from "../../shared/ai-background";
-import type { Project } from "../../shared/model";
+import {
+  cardAlt,
+  cardKind,
+  profileOnlyChange,
+  type Project,
+} from "../../shared/model";
+import {
+  exportCaption,
+  reviewState,
+  selectedFormat,
+  textHash,
+} from "../../shared/post-text";
 
 // AI provenance is recorded only while the AI asset is the shown cover photo.
 export function manifestBackground(p: Project) {
@@ -25,6 +36,14 @@ export function manifestBackground(p: Project) {
   };
 }
 
+// Alt text of the active kind per card: a photo card never shows the text
+// alt kept behind it.
+function altText(p: Project, label: (i: number) => string) {
+  return Array.from(
+    { length: p.count + 1 },
+    (_, i) => `${label(i)}: ${cardAlt(p, i)}`,
+  ).join("\n\n");
+}
 // Rendering, review approval, and export (ZIP, single PNG, text files).
 export const outputRouter = express.Router();
 outputRouter.post(
@@ -49,7 +68,11 @@ outputRouter.post(
     res.json(
       await mutate(async () => {
         const current = (await read(p.id)).current;
-        if (current.revision !== p.revision)
+        // Saves made during the render that change only post texts or
+        // display settings keep the images; any card change rejects them.
+        // The images are merged into the latest project, so a post text saved
+        // meanwhile is kept.
+        if (current.revision !== p.revision && !profileOnlyChange(p, current))
           throw Object.assign(
             new Error("렌더 중 변경되어 이전 이미지는 적용하지 않았습니다."),
             { status: 409, code: "STALE" },
@@ -57,15 +80,16 @@ outputRouter.post(
         const complete = only === undefined;
         return save(
           {
-            ...p,
+            ...current,
             renders: rendered.images,
             coverLayout: rendered.coverLayout,
-            renderRevision: complete ? p.revision + 1 : 0,
-            coverRenderRevision: complete || only === 0 ? p.revision + 1 : 0,
+            renderRevision: complete ? current.revision + 1 : 0,
+            coverRenderRevision:
+              complete || only === 0 ? current.revision + 1 : 0,
             status: complete ? "rendered" : "edited",
             imageApproved: false,
           },
-          p.revision,
+          current.revision,
           "이미지 렌더",
         );
       }),
@@ -127,16 +151,17 @@ outputRouter.get(
       zip.append(
         await fs.readFile(path.join(root, "renders", path.basename(f))),
         {
-          name: `${String(i + 1).padStart(2, "0")}-${i === 0 ? "cover" : "body"}.png`,
+          name: `${String(i + 1).padStart(2, "0")}-${cardKind(p, i)}.png`,
         },
       );
     }
-    zip.append(p.copy.caption, { name: "caption.txt" });
+    const caption = exportCaption(p);
+    zip.append(caption, { name: "caption.txt" });
     zip.append(
-      [p.copy.alt, ...p.copy.pages.map((p) => p.alt)]
-        .map((s, i) => `${String(i + 1).padStart(2, "0")}: ${s}`)
-        .join("\n\n"),
-      { name: "alt-text.txt" },
+      altText(p, (i) => String(i + 1).padStart(2, "0")),
+      {
+        name: "alt-text.txt",
+      },
     );
     zip.append(
       JSON.stringify(
@@ -144,6 +169,15 @@ outputRouter.get(
           versions: p.versions,
           revision: p.revision,
           order: p.renders.map((_, i) => i + 1),
+          cards: p.renders.map((_, i) => ({
+            order: i + 1,
+            kind: cardKind(p, i),
+          })),
+          post: {
+            format: selectedFormat(p),
+            textHash: textHash(caption),
+            review: reviewState(p, selectedFormat(p)),
+          },
           ...manifestBackground(p),
         },
         null,
@@ -179,11 +213,7 @@ outputRouter.get(
     const p = (await read(req.params.id)).current;
     const kind = z.enum(["caption", "alt"]).parse(req.params.kind);
     const text =
-      kind === "caption"
-        ? p.copy.caption
-        : [p.copy.alt, ...p.copy.pages.map((x) => x.alt)]
-            .map((t, i) => `${i + 1}: ${t}`)
-            .join("\n\n");
+      kind === "caption" ? exportCaption(p) : altText(p, (i) => String(i + 1));
     res
       .attachment(kind + ".txt")
       .type("text/plain; charset=utf-8")

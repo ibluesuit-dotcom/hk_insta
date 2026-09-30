@@ -1,4 +1,16 @@
-import { headlineLayout, headlineEditorText } from "../../shared/model";
+import {
+  FRAME_SUMMARY_LIMIT,
+  FRAME_TITLE_LIMIT,
+  PHOTO_TEXT_LIMIT,
+  headlineLayout,
+  headlineEditorText,
+  isPhotoPage,
+  photoLimit,
+  photoPageCount,
+  photoStyleOf,
+  frameLines,
+} from "../../shared/model";
+import { PHOTO_STYLES } from "./source-tab";
 import { Studio } from "../hooks/use-studio";
 import { AiBackgroundPicker } from "./ai-background";
 import { CoverPhotoUpload, Evidence, LockButton, RegenButton } from "./fields";
@@ -17,14 +29,30 @@ export function EditTab({ s }: { s: Studio }) {
         </div>
         <span className="pill">02 / 편집</span>
       </div>
+      {s.notice && (
+        <p className="notice" role="status">
+          {s.notice}
+        </p>
+      )}
       <div className="page-tabs">
         {Array.from({ length: p.count + 1 }, (_, i) => (
           <button
             key={i}
-            className={index === i ? "selected" : ""}
+            className={
+              (index === i ? "selected" : "") +
+              (i > 0 &&
+              isPhotoPage(p.copy.pages[i - 1]) &&
+              !p.copy.pages[i - 1].photoCard?.photo
+                ? " empty"
+                : "")
+            }
             onClick={() => setIndex(i)}
           >
-            {i === 0 ? "표지" : `본문 ${i}`}
+            {i === 0
+              ? "표지"
+              : isPhotoPage(p.copy.pages[i - 1])
+                ? `사진 ${i}`
+                : `본문 ${i}`}
           </button>
         ))}
       </div>
@@ -36,7 +64,7 @@ export function EditTab({ s }: { s: Studio }) {
               reorder(index - 1, index - 2);
             }}
           >
-            ← 본문 앞으로
+            ← 카드 앞으로
           </button>
           <button
             disabled={index === p.count}
@@ -44,7 +72,7 @@ export function EditTab({ s }: { s: Studio }) {
               reorder(index - 1, index);
             }}
           >
-            본문 뒤로 →
+            카드 뒤로 →
           </button>
         </div>
       )}
@@ -63,8 +91,326 @@ export function EditTab({ s }: { s: Studio }) {
           </p>
         </div>
       </details>
-      {index === 0 ? <CoverFields s={s} /> : <PageFields s={s} />}
+      {index === 0 ? (
+        <CoverFields s={s} />
+      ) : currentPage && isPhotoPage(currentPage) ? (
+        <PhotoCardFields s={s} />
+      ) : (
+        <PageFields s={s} />
+      )}
+      {index > 0 && <CardActions s={s} />}
+      <AddCard s={s} />
     </>
+  );
+}
+
+/** A hidden file input behind a button-like label; the pick is reset after. */
+function FilePick({
+  label,
+  disabled,
+  onFile,
+  className = "tiny",
+}: {
+  label: string;
+  disabled?: boolean;
+  onFile: (file: File) => void;
+  className?: string;
+}) {
+  return (
+    <label className={`file-pick ${className} ${disabled ? "disabled" : ""}`}>
+      {label}
+      <input
+        type="file"
+        aria-label={label}
+        accept="image/jpeg,image/png,image/webp"
+        disabled={disabled}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) onFile(file);
+        }}
+      />
+    </label>
+  );
+}
+
+/** Kind switch and delete for the selected following card. */
+function CardActions({ s }: { s: Studio }) {
+  const { p, index, busy } = s;
+  const page = p?.copy.pages[index - 1];
+  if (!p || !page) return null;
+  const i = index - 1;
+  const photoFull = !isPhotoPage(page) && photoPageCount(p) >= photoLimit(p);
+  return (
+    <div className="card-actions">
+      {isPhotoPage(page) ? (
+        <button
+          className="tiny"
+          disabled={!!busy}
+          onClick={() => s.toTextCard(i)}
+        >
+          {page.title || page.body
+            ? "텍스트 카드로 되돌리기"
+            : "텍스트 카드로 바꾸기"}
+        </button>
+      ) : (
+        <>
+          <FilePick
+            label="사진 카드로 바꾸기"
+            disabled={!!busy || photoFull}
+            onFile={(file) => s.toPhotoCard(i, file)}
+          />
+          {page.photoCard && (
+            <button
+              className="tiny"
+              disabled={!!busy || photoFull}
+              onClick={() => s.toPhotoCard(i)}
+            >
+              보관된 사진으로 바꾸기
+            </button>
+          )}
+        </>
+      )}
+      <button
+        className="tiny"
+        disabled={!!busy || p.count <= 1}
+        onClick={() => {
+          if (
+            window.confirm(
+              `카드 ${index + 1}을(를) 삭제할까요? 이 카드에 보관된 요약과 사진 설정도 현재 작업에서 함께 제거됩니다. 이전 버전에서 복원할 수 있습니다.`,
+            )
+          )
+            s.deleteCard(i);
+        }}
+      >
+        이 카드 삭제
+      </button>
+      {photoFull && (
+        <small className="hint">
+          사진 카드는 표지 외 최대 {photoLimit(p)}장입니다.
+        </small>
+      )}
+    </div>
+  );
+}
+
+/** ＋ 카드 추가: a text card, or a photo card after its upload succeeds. */
+function AddCard({ s }: { s: Studio }) {
+  const { p, busy } = s;
+  if (!p) return null;
+  const full = p.count >= 8;
+  const photoFull = photoPageCount(p) >= photoLimit(p);
+  return (
+    <div className="add-card">
+      <strong>＋ 카드 추가</strong>
+      <FilePick
+        label="사진 카드 추가"
+        disabled={!!busy || full || photoFull}
+        onFile={(file) => s.addCard(file)}
+      />
+      <button
+        className="tiny"
+        disabled={!!busy || full}
+        onClick={() => s.addCard()}
+      >
+        텍스트 카드 추가
+      </button>
+      <small className="hint">
+        전체 {p.count + 1}장 · 사진 {photoPageCount(p) + 1}/{photoLimit(p) + 1}
+        장(표지 포함)
+        {full
+          ? " · 카드는 표지 외 최대 8장입니다."
+          : photoFull
+            ? ` · 사진 카드는 표지 외 최대 ${photoLimit(p)}장입니다.`
+            : ""}
+      </small>
+    </div>
+  );
+}
+
+/** A following photo card: photo, fit, optional caption, credit and alt. */
+function PhotoCardFields({ s }: { s: Studio }) {
+  const { p, index, busy } = s;
+  const card = p?.copy.pages[index - 1]?.photoCard;
+  if (!p || !card) return null;
+  const i = index - 1;
+  const field = (patch: Parameters<Studio["photoCardField"]>[1]) =>
+    s.photoCardField(i, patch);
+  const showText = card.textVisible || !!card.text;
+  const page = p.copy.pages[i];
+  const frame = card.layout === "frame";
+  // The frame card always fills its box.
+  const cover = frame || card.fit === "cover";
+  return (
+    <div className="photo-card-fields">
+      {!!(page.title || page.body) && (
+        <p className="hint">
+          원래 요약은 보관되었습니다. ‘텍스트 카드로 되돌리기’로 복구합니다.
+        </p>
+      )}
+      <div
+        className="segmented card-style"
+        role="radiogroup"
+        aria-label="이 카드 디자인"
+      >
+        {PHOTO_STYLES.map(([value, label]) => (
+          <button
+            key={value}
+            role="radio"
+            aria-checked={photoStyleOf(card) === value}
+            className={photoStyleOf(card) === value ? "selected" : ""}
+            onClick={() => s.setCardStyle(i, value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {!card.photo ? (
+        <div className="card-photo empty">
+          <span>사진을 넣어 주세요</span>
+          <FilePick
+            label="사진 넣기"
+            className="primary"
+            disabled={!!busy}
+            onFile={(file) => s.replaceCardPhoto(i, file)}
+          />
+        </div>
+      ) : (
+        <div className="card-photo-wrap">
+          {/* Replace sits on the photo; a click on the photo moves the focus. */}
+          <FilePick
+            label="사진 교체"
+            className="primary photo-replace"
+            disabled={!!busy}
+            onFile={(file) => s.replaceCardPhoto(i, file)}
+          />
+          <div
+            className={"card-photo " + (cover ? "cover" : "contain")}
+            onPointerDown={(e) => {
+              if (!cover) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              field({
+                focal: {
+                  ...card.focal,
+                  x: Math.round(((e.clientX - r.left) / r.width) * 100),
+                  y: Math.round(((e.clientY - r.top) / r.height) * 100),
+                },
+              });
+            }}
+          >
+            <img
+              src={card.photo}
+              alt={card.alt || `카드 ${index + 1} 사진`}
+              style={
+                cover
+                  ? {
+                      objectPosition: `${card.focal.x}% ${card.focal.y}%`,
+                      transform: `scale(${card.focal.zoom})`,
+                      transformOrigin: `${card.focal.x}% ${card.focal.y}%`,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+          {cover && (
+            <small className="hint">
+              사진을 누르면 그 지점으로 초점이 옮겨집니다. 사진을 바꾸려면 위의
+              ‘사진 교체’를 누르세요.
+            </small>
+          )}
+        </div>
+      )}
+      <div className="row">
+        {!frame && (
+          <div className="segmented" role="group" aria-label="사진 맞춤">
+            {(
+              [
+                ["contain", "전체보기"],
+                ["cover", "화면 채우기"],
+              ] as const
+            ).map(([fit, label]) => (
+              <button
+                key={fit}
+                className={card.fit === fit ? "selected" : ""}
+                onClick={() => field({ fit })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {cover &&
+        (["x", "y", "zoom"] as const).map((k) => (
+          <label className="slider" key={k}>
+            {k === "x" ? "가로 초점" : k === "y" ? "세로 초점" : "확대"}
+            <input
+              type="range"
+              min={k === "zoom" ? 1 : 0}
+              max={k === "zoom" ? 3 : 100}
+              step={k === "zoom" ? 0.05 : 1}
+              value={card.focal[k]}
+              onChange={(e) =>
+                field({ focal: { ...card.focal, [k]: Number(e.target.value) } })
+              }
+            />
+            <span>
+              {card.focal[k]}
+              {k === "zoom" ? "×" : "%"}
+            </span>
+          </label>
+        ))}
+      {frame ? (
+        <FrameFields s={s} />
+      ) : showText ? (
+        <>
+          <label>
+            사진 문구{" "}
+            <span
+              className={[...card.text].length > PHOTO_TEXT_LIMIT ? "warn" : ""}
+            >
+              {[...card.text].length} / {PHOTO_TEXT_LIMIT}자 · 최대 3줄
+            </span>
+          </label>
+          <textarea
+            aria-label="사진 문구"
+            value={card.text}
+            maxLength={PHOTO_TEXT_LIMIT}
+            onChange={(e) => field({ text: e.target.value })}
+          />
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={!card.textVisible}
+              onChange={(e) => field({ textVisible: !e.target.checked })}
+            />
+            문구 숨기기{" "}
+            <small>(내용은 보관되고 이미지에만 나오지 않습니다)</small>
+          </label>
+        </>
+      ) : (
+        <button className="tiny" onClick={() => field({ textVisible: true })}>
+          ＋ 문구 추가
+        </button>
+      )}
+      <details className="photo-meta">
+        <summary>사진 출처·설명</summary>
+        <label>사진 출처</label>
+        <input
+          aria-label="사진 출처"
+          value={card.credit}
+          maxLength={100}
+          onChange={(e) => field({ credit: e.target.value })}
+        />
+        <label>사진 대체 텍스트</label>
+        <textarea
+          aria-label="사진 대체 텍스트"
+          value={card.alt}
+          maxLength={600}
+          onChange={(e) => field({ alt: e.target.value })}
+        />
+      </details>
+    </div>
   );
 }
 
@@ -343,5 +689,100 @@ export function HistoryTab({ s }: { s: Studio }) {
         </div>
       ))}
     </>
+  );
+}
+
+/** 1g frame card: title, red highlight, a 3-line summary with its marks. */
+function FrameFields({ s }: { s: Studio }) {
+  const { p, index } = s;
+  const card = p?.copy.pages[index - 1]?.photoCard;
+  if (!p || !card) return null;
+  const field = (patch: Parameters<Studio["photoCardField"]>[1]) =>
+    s.photoCardField(index - 1, patch);
+  const title = card.title ?? "";
+  const summary = card.summary ?? "";
+  const lines = frameLines(summary).length;
+  const missing = (sub: string | undefined, text: string) =>
+    !!sub && !text.includes(sub);
+  return (
+    <div className="frame-fields">
+      <label>
+        제목{" "}
+        <span>
+          {[...title].length} / {FRAME_TITLE_LIMIT}자 · 한 줄
+        </span>
+      </label>
+      <input
+        aria-label="액자형 제목"
+        value={title}
+        maxLength={FRAME_TITLE_LIMIT}
+        placeholder="예: 코스피 9천 달성"
+        onChange={(e) => field({ title: e.target.value })}
+      />
+      <label>제목 빨간 강조</label>
+      <input
+        aria-label="제목 빨간 강조"
+        value={card.titleHighlight ?? ""}
+        placeholder="제목 안의 부분 문구 (예: 9천)"
+        onChange={(e) => field({ titleHighlight: e.target.value })}
+      />
+      {missing(card.titleHighlight, title) && (
+        <p className="warn">제목에 이 문구가 없어 강조가 표시되지 않습니다.</p>
+      )}
+      <label>
+        요약{" "}
+        <span className={lines > 3 ? "warn" : ""}>
+          {lines} / 3줄 ·{" "}
+          <span
+            className={
+              [...summary.replace(/\n/g, "")].length > 30 ? "warn" : ""
+            }
+          >
+            {[...summary.replace(/\n/g, "")].length} / 30자
+          </span>{" "}
+          · 줄바꿈은 직접 넣습니다
+        </span>
+      </label>
+      <textarea
+        aria-label="액자형 요약"
+        value={summary}
+        maxLength={FRAME_SUMMARY_LIMIT}
+        rows={4}
+        placeholder={
+          "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록"
+        }
+        onChange={(e) => field({ summary: e.target.value })}
+      />
+      {lines > 3 && (
+        <p className="warn" role="alert">
+          요약이 {lines}줄입니다. 3줄로 줄여야 렌더됩니다. 쓴 내용은 그대로
+          보관됩니다.
+        </p>
+      )}
+      <label>요약 빨간 강조</label>
+      <input
+        aria-label="요약 빨간 강조"
+        value={card.summaryHighlight ?? ""}
+        placeholder="요약 안의 부분 문구"
+        onChange={(e) => field({ summaryHighlight: e.target.value })}
+      />
+      {missing(card.summaryHighlight, summary) && (
+        <p className="warn">요약에 이 문구가 없어 강조가 표시되지 않습니다.</p>
+      )}
+      <label>요약 밑줄</label>
+      <input
+        aria-label="요약 밑줄"
+        value={card.summaryUnderline ?? ""}
+        placeholder="요약 안의 부분 문구"
+        onChange={(e) => field({ summaryUnderline: e.target.value })}
+      />
+      {missing(card.summaryUnderline, summary) && (
+        <p className="warn">요약에 이 문구가 없어 밑줄이 표시되지 않습니다.</p>
+      )}
+      <small className="hint">
+        강조·밑줄은 한 줄 안의 문구에만 적용됩니다. 사진 출처는 아래 ‘사진
+        출처·설명’에서 넣으면 사진 오른쪽 아래에 표시됩니다.
+      </small>
+    </div>
   );
 }

@@ -356,8 +356,14 @@ test("P4 anonymous export denied; no approval wording; desktop/mobile screenshot
     expect((await anon.get(`/api/projects/${p.id}/png/0`)).status()).toBe(401);
     await anon.dispose();
   }
-  await expect(page.getByText(/승인|검수 완료|03/)).toHaveCount(0);
-  await expect(page.locator("nav.steps button")).toHaveCount(2);
+  await expect(page.getByText(/승인|검수 완료/)).toHaveCount(0);
+  // 01 source, 02 cards, 03 Instagram post text (no approval step).
+  await expect(page.locator("nav.steps button")).toHaveText([
+    "01원문과 제작 방향",
+    "02문안·사진 편집",
+    "03인스타 게시글",
+  ]);
+  await expect(page.locator("nav.steps button")).toHaveCount(3);
   await expect(page.getByRole("button", { name: / 수정$/ })).toHaveCount(0);
   // export is the element right after refresh
   const order = await page.evaluate(() => {

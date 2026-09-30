@@ -303,6 +303,13 @@ header h1 {
   color: #b57b1c !important;
   font-size: 12px;
 }
+.caption-conflict blockquote {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 3px solid currentColor;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .steps {
   display: flex;
   margin-bottom: 22px;
@@ -1559,4 +1566,281 @@ header h1 {
 .ai-subject-request span {
   font-weight: 400;
   color: #6b7670;
+}
+
+/* Photo cards */
+.file-pick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cfd8d3;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+.file-pick input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+.file-pick.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.file-pick.disabled input {
+  cursor: not-allowed;
+}
+.card-actions,
+.add-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+.add-card {
+  border-top: 1px solid #e3e9e5;
+  padding-top: 16px;
+}
+.add-card .hint,
+.card-actions .hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+.card-photo {
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 4 / 5;
+  margin: 14px auto;
+  overflow: hidden;
+  background: #0b1b2b;
+}
+.card-photo.cover {
+  cursor: crosshair;
+}
+.card-photo > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.card-photo.cover > img {
+  object-fit: cover;
+}
+.photo-meta {
+  margin-top: 14px;
+}
+
+/* Instagram post step */
+.post-formats {
+  flex-wrap: wrap;
+}
+.post-editor {
+  min-height: 220px;
+}
+.post-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.post-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.post-review.pass {
+  color: #30704e;
+}
+.post-review.fail,
+.post-review.stale_source {
+  color: #b3261e;
+}
+.post-review.needs_review {
+  color: #b57b1c;
+}
+.post-review .hint,
+.post-review details {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 400;
+}
+.post-candidate {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #cfd8d3;
+  border-radius: 7px;
+  background: #f8faf7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.post-candidate.failed {
+  border-color: #e3b4ae;
+  color: #b3261e;
+}
+.post-candidate blockquote {
+  margin: 0;
+  padding: 10px 12px;
+  background: white;
+  border-left: 3px solid #30704e;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.post-options {
+  margin: 10px 0;
+}
+
+/* Post type (01) */
+.post-type,
+.photo-post {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+}
+.post-type .segmented,
+.photo-post .segmented {
+  flex-wrap: wrap;
+}
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.photo-strip img {
+  width: 64px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #0b1b2b;
+}
+.post-type {
+  margin: 0 0 18px;
+}
+.photo-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed #becbc5;
+  border-radius: 7px;
+  background: #f8faf7;
+}
+.photo-add .file-pick {
+  padding: 9px 16px;
+  font-weight: 700;
+}
+.photo-add .file-pick.primary {
+  background: #c8102e;
+  border-color: #c8102e;
+  color: white;
+}
+.photo-add .hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+.photo-strip .thumb {
+  position: relative;
+}
+.photo-strip .thumb-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(11, 27, 43, 0.78);
+  color: white;
+  font-size: 15px;
+  line-height: 22px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.photo-strip .thumb:hover .thumb-remove,
+.photo-strip .thumb-remove:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .photo-strip .thumb-remove {
+    opacity: 1;
+  }
+}
+.notice {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: #e7f1e9;
+  color: #30704e;
+  font-size: 13px;
+  font-weight: 600;
+}
+.card-photo.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed #becbc5;
+  background: #f8faf7;
+  color: #6b7670;
+  font-size: 13px;
+}
+.card-photo.empty .file-pick.primary {
+  background: #c8102e;
+  border-color: #c8102e;
+  color: white;
+  padding: 8px 14px;
+  font-weight: 700;
+}
+.page-tabs button.empty {
+  border-style: dashed;
+}
+.photo-strip .thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 80px;
+  border: 1px dashed #becbc5;
+  border-radius: 4px;
+  background: #f8faf7;
+  color: #6b7670;
+  font-weight: 700;
+}
+.photo-count {
+  flex-wrap: wrap;
+}
+.card-photo-wrap {
+  position: relative;
+  width: 240px;
+  max-width: 100%;
+  margin: 14px auto;
+}
+.card-photo-wrap .card-photo {
+  margin: 0;
+  width: 100%;
+}
+.card-photo-wrap .photo-replace {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  background: #c8102e;
+  border-color: #c8102e;
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.card-photo-wrap .hint {
+  display: block;
+  margin-top: 6px;
+  text-align: center;
 }

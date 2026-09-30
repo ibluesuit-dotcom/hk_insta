@@ -45,7 +45,11 @@ export function applyDrafts(p: Project, drafts: Drafts): Project {
   for (const [key, patch] of Object.entries(drafts)) {
     if (!patch || typeof patch !== "object") continue;
     // Drafts saved before layout metadata existed used manual slash breaks.
-    if (key === "headline" && "copy.headline" in patch && !("copy.headlineMode" in patch))
+    if (
+      key === "headline" &&
+      "copy.headline" in patch &&
+      !("copy.headlineMode" in patch)
+    )
       next.copy.headlineMode = "manual";
     for (const path of itemPaths(key)) {
       if (!(path in patch)) continue;

@@ -2,6 +2,7 @@ import { api } from "../api";
 import { statusNames } from "../format";
 import { Studio } from "../hooks/use-studio";
 import { EditTab, HistoryTab } from "./edit-tab";
+import { PostTextPanel } from "./post-text-panel";
 import { PreviewPanel } from "./preview-panel";
 import { SourceTab } from "./source-tab";
 
@@ -50,6 +51,7 @@ export function StudioWorkspace({ s }: { s: Studio }) {
         {[
           ["source", "01", "원문과 제작 방향"],
           ["edit", "02", "문안·사진 편집"],
+          ["post", "03", "인스타 게시글"],
         ].map(([key, num, label]) => (
           <button
             className={tab === key ? "selected" : ""}
@@ -67,6 +69,8 @@ export function StudioWorkspace({ s }: { s: Studio }) {
             <SourceTab s={s} />
           ) : tab === "edit" ? (
             <EditTab s={s} />
+          ) : tab === "post" ? (
+            <PostTextPanel s={s} />
           ) : tab === "history" ? (
             <HistoryTab s={s} />
           ) : null}

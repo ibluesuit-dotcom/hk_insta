@@ -1,9 +1,16 @@
 import express from "express";
 import { z } from "zod";
 import { sourceHeadline } from "../../shared/source-title";
-import { mergeCopy } from "../../shared/model";
+import {
+  expandTextCopy,
+  isPhotoPage,
+  mergeCopy,
+  photoPageCount,
+  textView,
+} from "../../shared/model";
 import { read, save, mutate } from "../store";
 import { generate } from "../ai";
+import { generatePhotoTexts } from "../summary";
 import { wrap } from "../http";
 
 // AI copy generation, applied only if the project did not change meanwhile.
@@ -21,6 +28,10 @@ generateRouter.post(
       .string()
       .regex(/^(all|headline|kicker|keywords|caption|alt|pages|page:[0-7])$/)
       .parse(req.body.scope);
+    if (scope === "caption")
+      throw new Error(
+        "게시글은 03 인스타 게시글 단계에서 생성하세요. 원문 대조 검증을 함께 거칩니다.",
+      );
     if ((scope === "all" || scope === "headline") && p.sourceTitle.trim())
       sourceHeadline(p.sourceTitle);
     if (
@@ -39,13 +50,39 @@ generateRouter.post(
       throw Object.assign(new Error("생성 전에 표지 사진을 첨부하세요."), {
         code: "IMAGE",
       });
+    // Only active text cards are written by AI. Photo cards (and the text
+    // kept behind them) are refused up front or left out of the request.
+    // A photo post's AI writes the cover only: text cards left over from a
+    // summary post keep what the editor wrote.
+    const { view, map } =
+      p.postType === "photo" && scope === "all"
+        ? textView({ ...p, copy: { ...p.copy, pages: [] } })
+        : textView(p);
+    let viewScope = scope;
+    if (scope.startsWith("page:")) {
+      const page = p.copy.pages[Number(scope.slice(5))];
+      if (!page || isPhotoPage(page))
+        throw new Error("사진 카드는 AI로 작성하지 않습니다.");
+      viewScope = "page:" + map.indexOf(Number(scope.slice(5)));
+    }
+    if (scope === "pages" && !map.length)
+      throw new Error("AI로 작성할 텍스트 카드가 없습니다.");
     let result;
+    let cardTexts: Awaited<ReturnType<typeof generatePhotoTexts>> = [];
     try {
       result = await generate(
-        p,
-        scope,
+        view,
+        viewScope,
         String(req.body.extra || "").slice(0, 2000),
       );
+      // A photo post writes its photo cards' text now; photos come later.
+      if (
+        p.postType === "photo" &&
+        p.photoAi &&
+        scope === "all" &&
+        photoPageCount(p)
+      )
+        cardTexts = await generatePhotoTexts(p, photoPageCount(p));
     } catch (e) {
       // AI_QUOTA 처럼 이미 구분된 코드는 유지하고, 나머지만 일반 AI 오류로 묶는다.
       const err = e as Error & { code?: string };
@@ -63,12 +100,28 @@ generateRouter.post(
             ),
             { status: 409, code: "STALE" },
           );
-        if (scope !== "all" && scope !== "keywords")
-          return { ...p, copy: mergeCopy(p, result.copy, scope) };
+        const copy = expandTextCopy(
+          p,
+          mergeCopy(view, result.copy, viewScope),
+          map,
+        );
+        // Only empty fields are filled: what the editor wrote stays.
+        copy.pages.filter(isPhotoPage).forEach((page, i) => {
+          const t = cardTexts[i];
+          const card = page.photoCard;
+          if (!t || !card) return;
+          if (!card.title?.trim()) {
+            card.title = t.title;
+            card.titleHighlight = t.titleHighlight;
+          }
+          if (!card.summary?.trim()) card.summary = t.lines.join("\n");
+          if (!card.text.trim()) card.text = t.lines.join(" ");
+        });
+        if (scope !== "all" && scope !== "keywords") return { ...p, copy };
         return save(
           {
             ...p,
-            copy: mergeCopy(p, result.copy, scope),
+            copy,
             headlineBreaks: "",
             appliedDirection:
               scope === "all" ? p.direction : p.appliedDirection,

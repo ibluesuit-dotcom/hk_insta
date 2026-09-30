@@ -372,7 +372,7 @@ test("page reduction asks before loss and reorder carries locks", async ({
   await expect(page.getByLabel("본문 페이지 수")).toHaveValue("3");
   await page.getByRole("button", { name: "02문안·사진 편집" }).click();
   await page.getByRole("button", { name: "본문 3", exact: true }).click();
-  await page.getByRole("button", { name: "← 본문 앞으로" }).click();
+  await page.getByRole("button", { name: "← 카드 앞으로" }).click();
   await expect(page.getByLabel("page:1 잠금")).toContainText("잠김");
   await page.getByRole("button", { name: "지금 저장", exact: true }).click();
   const saved = await (await request.get(`/api/projects/${p.id}`)).json();

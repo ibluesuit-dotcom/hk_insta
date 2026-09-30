@@ -12,6 +12,9 @@ export const statusNames: Record<string, string> = {
 export function draftsStorageKey(projectId: string) {
   return "editor-drafts:" + projectId;
 }
+export function captionKey(projectId: string) {
+  return "caption-pending:" + projectId;
+}
 
 /** Drops page drafts whose page index no longer exists (index >= count). */
 export function keepPageDraftsBelow(drafts: Drafts, count: number): Drafts {
