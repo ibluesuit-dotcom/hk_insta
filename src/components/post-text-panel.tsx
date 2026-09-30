@@ -208,9 +208,9 @@ function PostOptionsFields({
               set({ detail: e.target.value as PostOptions["detail"] })
             }
           >
-            <option value="brief">더 간결하게</option>
-            <option value="default">기본 · 소제목+1~2문장</option>
-            <option value="detailed">조금 자세히</option>
+            <option value="brief">간결 · 소제목당 요점 1~2개</option>
+            <option value="default">기본 · 소제목당 요점 2~3개</option>
+            <option value="detailed">자세히 · 소제목당 요점 3~5개</option>
           </select>
         </>
       )}

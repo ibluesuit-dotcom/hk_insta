@@ -100,12 +100,12 @@ test("four formats: full without AI, summary and bullets via candidates, export 
     })
     .toEqual(["manual", undefined]);
 
-  // Bullets: sections become "• 소제목\n내용".
+  // Bullets: "소제목\n- 요점\n- 요점".
   await page.getByRole("tab", { name: "불릿 요약" }).click();
   await page.getByRole("button", { name: "생성", exact: true }).click();
   await candidate.getByRole("button", { name: "이 후보 적용" }).click();
   await expect(page.getByLabel("불릿 요약 글", { exact: true })).toHaveValue(
-    /^• 논점 1\n/,
+    /^\[모의\] 핵심 1\n- .+\n- .+\n- .+/,
   );
 
   // Export the summary: preview, caption.txt and manifest follow it.

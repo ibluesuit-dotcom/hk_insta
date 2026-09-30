@@ -131,10 +131,16 @@ test("generation format and every quote are checked against the segments", () =>
   const bullets = {
     ...base,
     text: "",
-    sections: [{ heading: "수출", body: "10% 증가" }],
+    sections: [
+      { heading: "수출", points: ["10% 증가", "- 반도체가 견인"] },
+      { heading: "전망", points: ["정부는 증가 예상"] },
+    ],
   };
   assert.doesNotThrow(() => checkGeneration("bullets", bullets, segs));
-  assert.equal(bulletsText(bullets.sections), "• 수출\n10% 증가");
+  assert.equal(
+    bulletsText(bullets.sections),
+    "수출\n- 10% 증가\n- 반도체가 견인\n\n전망\n- 정부는 증가 예상",
+  );
 });
 
 test("a contradiction always fails; a serious unsupported claim needs review", () => {

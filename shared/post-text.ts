@@ -19,7 +19,7 @@ export const POST_FORMAT_HELP: Record<PostFormat, string> = {
   summary:
     "글머리표 없이 서술형으로 기사 핵심을 약 1/3 분량으로 압축합니다. 핵심 사건 → 근거·배경 → 조건·반론 순서입니다.",
   bullets:
-    "‘• 소제목’과 내용 묶음으로 논점을 나눕니다. 항목 수는 기사 근거량에 맞춥니다.",
+    "소제목 아래에 ‘- 요점’을 2~3개씩 붙여 논점을 나눕니다. 항목 수는 기사 근거량에 맞춥니다.",
 };
 
 export const postOptionsSchema = z
