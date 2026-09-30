@@ -14,6 +14,7 @@ import {
   candidate,
   deadline,
   ensureBrief,
+  usedSubjects,
   foreignAsset,
   generateBackground,
   loadBrief,
@@ -63,11 +64,21 @@ aiBackgroundRouter.post(
       .optional()
       .catch(undefined)
       .parse(req.body?.variants);
+    // The editor's subject wish, and "다시 생성": pick a subject other than
+    // the ones this project already used. Both make a new brief.
+    const subjectRequest = z
+      .string()
+      .max(200)
+      .optional()
+      .catch(undefined)
+      .parse(req.body?.subjectRequest)
+      ?.trim();
+    const avoid = req.body?.fresh === true ? await usedSubjects(p.id) : [];
     // A manual generate: a new operation the image requests carry.
     const op = startOperation(p.id, variants);
     let record;
     try {
-      record = await ensureBrief(p, d);
+      record = await ensureBrief(p, d, undefined, { subjectRequest, avoid });
     } catch (e) {
       op.end(failureOf(e));
       throw e;

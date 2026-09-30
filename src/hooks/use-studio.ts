@@ -109,6 +109,8 @@ export function useStudio() {
   const autosavePaused = useRef(false);
   // AI background candidates live here so they survive tab switches. Late
   // responses are dropped unless project, lookup generation and request match.
+  // The editor's optional subject wish for the next AI background.
+  const [aiSubject, setAiSubject] = useState("");
   const [ai, setAiState] = useState<AiState | null>(null);
   const aiRef = useRef<AiState | null>(null);
   const aiGeneration = useRef(0);
@@ -378,11 +380,18 @@ export function useStudio() {
     try {
       const current = await flush();
       // Every manual generate is a new server operation; a cached brief is
-      // answered without a paid call.
+      // answered without a paid call. Once candidates exist, generating
+      // again asks for a subject other than the ones already used.
+      const fresh = AI_VARIANTS.some((v) => state.slots[v].candidate);
       const brief = await api(
         `/projects/${projectId}/ai-background/brief`,
         "POST",
-        { expectedSourceHash: sourceHash(current), variants },
+        {
+          expectedSourceHash: sourceHash(current),
+          variants,
+          fresh,
+          subjectRequest: aiSubject.trim() || undefined,
+        },
       );
       briefId = brief.briefId;
       operationId = brief.operationId;
@@ -868,6 +877,8 @@ export function useStudio() {
     files,
     ai,
     generateAi,
+    aiSubject,
+    setAiSubject,
     applyAi,
   };
 }

@@ -23,7 +23,6 @@ import { normalizeToJpeg } from "./images";
 import { reserve } from "./ai-usage";
 import { root } from "./store";
 
-
 export const BRIEF_MODEL = "gpt-6-astra";
 export const IMAGE_MODEL = "gpt-image-2.5-flare";
 export const IMAGE_SIZE = "1088x1360";
@@ -160,8 +159,20 @@ title_truncated 또는 body_truncated가 true이면 해당 값은 앞부분만 �
 - 글자·간판·로고가 없어도 성립하는 구도를 먼저 고른다. 모든 물건을 장난감처럼 매끈하게 만들지 말고, 도장·접합부·마모 등 실제 재질은 유지한다.
 - 매장에서는 상업용 포장·진열 박스·카드 제품 로고가 보이지 않는 각도를 우선한다. 흐림 처리만으로 무문자를 충족했다고 보지 않는다.
 - 전자부품·회로기판은 저항 코드·실크스크린·일련번호·작은 부품 표식이 보이지 않는 패키지와 각도를 고르고, 납땜 접합부와 실제 재질은 유지한다.
-- 사람이 꼭 필요하지 않으면 사물/공간으로 충분하다. 사람이 필요하면 기사에 없는 감정이나 행동을 연출하지 않고 식별 불가능한 일반 배경 인물로 제한한다.
-- 실제 인물, 사건, 회사 시설, 제품의 정확한 재현이 필요한 경우 일반 장면으로 대체 가능한지 판단하고 불가능하면 needs_review로 표시한다.
+- 생산 라인·연구실·사무실·매장·거리처럼 사람이 자연스럽게 일하거나 오가는 장면도 쓸 수 있다. 사람은 특정 실존 인물로 보이지 않는 일반 인물로 하고, 기사에 없는 감정이나 과장된 행동을 연출하지 않는다.
+- 특정 회사의 실제 건물·간판·로고·제품 디자인은 그대로 재현하지 않고, 같은 업종의 일반적인 공장·클린룸·사무 공간·물류 현장으로 표현한다. 회사가 등장한다는 이유만으로 needs_review로 표시하지 않는다.
+
+[소재 다양성]
+- 제품·부품 클로즈업을 기본값으로 쓰지 않는다. 기사가 그 제품 자체(출시·결함·가격·수출 품목)를 다룰 때만 클로즈업을 쓴다.
+- 기업 실적·주가·투자·자사주·배당·지배구조 기사는 제품 대신 그 산업의 생산 현장, 연구·사무 공간, 금융가나 업무 지구의 일반 건물처럼 기사 성격에 맞는 장면을 고른다.
+- 같은 산업이라도 생산 라인, 클린룸, 연구실, 물류, 사무 공간, 도시 풍경 등 여러 장면 중 이 기사에 가장 맞는 것을 고른다.
+- avoid_subjects가 있으면 그 소재·장면과 겹치지 않는 다른 소재를 두 후보 모두에서 고른다. 같은 사물을 각도만 바꿔 반복하지 않는다.
+- subject_request가 있으면 기사 내용과 모순되지 않는 한 그 소재나 장면을 두 후보 모두에서 우선한다. 요청이 기사와 맞지 않으면 needs_review와 그 이유를 쓴다. 아래 무문자 조건은 요청이 있어도 유지한다.
+
+[불필요한 글자·표식 금지]
+- 이 조건의 목적은 AI가 만드는 의미 없는 글자와 장식 도형을 막는 것이다. 소재를 좁히라는 뜻이 아니다.
+- 이미지 안에 글자·숫자·로고·화살표·표식·아이콘·도표·그래프·도식·인포그래픽·화면 UI를 넣지 않는다.
+- 모니터·전광판·간판이 장면에 필요하면 화면이 꺼져 있거나 카메라를 향하지 않는 구도를 고른다.
 
 [후보 B: 디지털 아트형]
 - 같은 기사 소재를 분명히 일러스트로 읽히게 표현한다.
@@ -217,12 +228,24 @@ export interface BriefInput {
   art_style: "auto";
   title_truncated: boolean;
   body_truncated: boolean;
+  /** The editor's own subject wish for this run, if any. */
+  subject_request?: string | null;
+  /** Subjects of this project's earlier images: pick something else. */
+  avoid_subjects?: string[];
 }
+export type BriefExtra = { subjectRequest?: string; avoid?: string[] };
 /** §3.2: a value is null only when empty after trimming; long text is cut. */
-export function briefInput(title: string, body: string): BriefInput {
+export function briefInput(
+  title: string,
+  body: string,
+  extra: BriefExtra = {},
+): BriefInput {
   const t = title.trim();
   const b = body.trim();
+  const request = extra.subjectRequest?.trim().slice(0, 200);
   return {
+    ...(request ? { subject_request: request } : {}),
+    ...(extra.avoid?.length ? { avoid_subjects: extra.avoid.slice(0, 8) } : {}),
     title: t ? t.slice(0, INPUT_LIMITS.title) : null,
     body: b ? b.slice(0, INPUT_LIMITS.body) : null,
     aspect_ratio: "4:5",
@@ -290,7 +313,7 @@ Produce one continuous photograph-like scene, not a poster, banner or split layo
 
 Use ${clause(s.text_free_choices)}. Data displays, charts and graphs are
 outside the scene. Keep lettering, numerals, logos, labels and graphic overlays out
-of the image. For electronics, choose packages and viewing angles that keep resistor
+of the image, and so are arrows, icons, diagram marks and other symbols. For electronics, choose packages and viewing angles that keep resistor
 codes, PCB silkscreen, serial markings and tiny component labels out of view; in
 shops, choose angles that keep retail packaging and display-box logos out of view.
 ${ONLY_LISTED}
@@ -344,6 +367,8 @@ const briefRecordSchema = z
       art_style: z.literal("auto"),
       title_truncated: z.boolean(),
       body_truncated: z.boolean(),
+      subject_request: z.string().nullable().optional(),
+      avoid_subjects: z.array(z.string()).optional(),
     }),
     brief: briefSchema,
     at: z.string(),
@@ -351,7 +376,16 @@ const briefRecordSchema = z
   .strict();
 export type BriefRecord = z.infer<typeof briefRecordSchema>;
 export const briefIdSchema = z.string().regex(/^[0-9a-f]{64}$/);
-export function briefKey(projectId: string, hash: string, mock: boolean) {
+export function briefKey(
+  projectId: string,
+  hash: string,
+  mock: boolean,
+  extra: BriefExtra = {},
+) {
+  // A request or an avoid list makes another brief; without them the key is
+  // the plain one, so a first generate still reuses its cached brief.
+  const request = extra.subjectRequest?.trim() || undefined;
+  const avoid = extra.avoid?.length ? extra.avoid : undefined;
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -360,6 +394,7 @@ export function briefKey(projectId: string, hash: string, mock: boolean) {
         model: mock ? MOCK_MODEL : BRIEF_MODEL,
         version: BG_PROMPT_VERSION,
         mock,
+        ...(request || avoid ? { request, avoid } : {}),
       }),
     )
     .digest("hex");
@@ -486,10 +521,11 @@ export async function ensureBrief(
   project: Pick<Project, "id" | "sourceTitle" | "source">,
   d: Deadline,
   request?: BriefRequest,
+  extra: BriefExtra = {},
 ): Promise<BriefRecord> {
   const mock = mocked(request);
   const hash = sourceHash(project);
-  const briefId = briefKey(project.id, hash, mock);
+  const briefId = briefKey(project.id, hash, mock, extra);
   const cached = await loadBrief(project.id, briefId);
   if (cached) {
     d.check();
@@ -502,7 +538,7 @@ export async function ensureBrief(
     return record;
   }
   const task = (async () => {
-    const input = briefInput(project.sourceTitle, project.source);
+    const input = briefInput(project.sourceTitle, project.source, extra);
     if (input.title === null && input.body === null)
       throw fail("기사 제목이나 본문을 먼저 입력하세요.", "INPUT", 400);
     let brief: Brief;
@@ -878,8 +914,7 @@ function forget() {
     if (Object.values(op.steps).some((s) => s.stage === "image")) continue;
     operations.delete(op.id);
     const last = newest.get(op.projectId);
-    for (const v of VARIANTS)
-      if (last?.[v] === op.id) delete last[v];
+    for (const v of VARIANTS) if (last?.[v] === op.id) delete last[v];
   }
 }
 function newOperation(projectId: string, variants: AiVariant[], step: Step) {
@@ -915,7 +950,8 @@ export function startOperation(
       const at = new Date().toISOString();
       for (const step of Object.values(op.steps)) {
         if (step.stage !== "brief") continue;
-        if (error) Object.assign(step, { stage: "failed", failure: { ...error, at } });
+        if (error)
+          Object.assign(step, { stage: "failed", failure: { ...error, at } });
         else
           Object.assign(step, {
             stage: "awaiting",
@@ -973,10 +1009,15 @@ export function startImage(
   if (op) {
     const waiting = op.steps[variant]!;
     if (waiting.stage === "awaiting" && Date.now() >= waiting.until!) {
-      const message = "이 생성 작업은 시간이 지나 만료됐습니다. 다시 생성하세요.";
+      const message =
+        "이 생성 작업은 시간이 지나 만료됐습니다. 다시 생성하세요.";
       Object.assign(waiting, {
         stage: "failed",
-        failure: { code: "AI_OPERATION_EXPIRED", message, at: new Date().toISOString() },
+        failure: {
+          code: "AI_OPERATION_EXPIRED",
+          message,
+          at: new Date().toISOString(),
+        },
       });
       bump(projectId);
       throw refuse(message, "AI_OPERATION_EXPIRED");
@@ -989,7 +1030,10 @@ export function startImage(
   return {
     startedAt: step.imageAt!,
     /** Keep the outcome: the new asset, or the failure for a reloaded page. */
-    end(result: { assetId: string } | { error: { code: string; message: string } }) {
+    end(
+      result:
+        { assetId: string } | { error: { code: string; message: string } },
+    ) {
       if ("assetId" in result)
         Object.assign(step, { stage: "done", assetId: result.assetId });
       else
@@ -1038,7 +1082,9 @@ export function progress(projectId: string) {
       )
         pending[v] = found;
     }
-    const last = ops.find((op) => op.steps[v] && op.steps[v]!.stage !== "followed");
+    const last = ops.find(
+      (op) => op.steps[v] && op.steps[v]!.stage !== "followed",
+    );
     const step = last?.steps[v];
     if (step?.stage === "failed") failures[v] = step.failure!;
     if (step?.stage === "done") done[v] = step.assetId!;
@@ -1049,4 +1095,27 @@ export function progress(projectId: string) {
     failures,
     done,
   };
+}
+
+/** Subjects of this project's earlier images, newest first, deduplicated. */
+export async function usedSubjects(projectId: string, limit = 8) {
+  let names: string[] = [];
+  try {
+    names = await fs.readdir(assetsDir());
+  } catch {}
+  const found: { at: string; subject: string }[] = [];
+  for (const name of names) {
+    const m = /^([0-9a-f-]{36})\.json$/.exec(name);
+    if (!m) continue;
+    try {
+      const s = await loadSidecar(m[1]);
+      if (s.projectId === projectId)
+        found.push({ at: s.at, subject: s.brief[s.variant].subject });
+    } catch {}
+  }
+  return [
+    ...new Set(
+      found.sort((a, b) => b.at.localeCompare(a.at)).map((f) => f.subject),
+    ),
+  ].slice(0, limit);
 }

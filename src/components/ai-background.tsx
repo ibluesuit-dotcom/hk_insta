@@ -52,10 +52,31 @@ export function AiBackgroundPicker({ s }: { s: Studio }) {
             disabled={!!busy || generating || noText}
             onClick={() => s.generateAi()}
           >
-            {generating ? "AI 이미지 생성 중…" : "AI로 이미지 생성하기"}
+            {generating
+              ? "AI 이미지 생성 중…"
+              : shown
+                ? "다른 소재로 다시 생성"
+                : "AI로 이미지 생성하기"}
           </button>
         )}
       </div>
+      {enabled && (
+        <label className="ai-subject-request">
+          그림 소재 요청 <span>선택 · 비우면 AI가 기사에서 고릅니다</span>
+          <input
+            aria-label="그림 소재 요청"
+            maxLength={200}
+            value={s.aiSubject}
+            placeholder="예: 반도체 공장 클린룸에서 일하는 연구원"
+            onChange={(e) => s.setAiSubject(e.target.value)}
+          />
+        </label>
+      )}
+      {enabled && shown && (
+        <p className="hint">
+          다시 생성하면 앞서 만든 이미지와 다른 소재·장면을 고릅니다.
+        </p>
+      )}
       {enabled && noText && (
         <p className="hint">원문 제목이나 본문을 먼저 입력하세요.</p>
       )}
