@@ -68,18 +68,13 @@ test("four formats: full without AI, summary and bullets via candidates, export 
   await page.getByRole("tab", { name: "기사 요약" }).click();
   await page.getByText("요약 설정").click();
   await page.getByLabel("요약 길이").selectOption("short");
-  await page.getByRole("button", { name: "생성", exact: true }).click();
-  const candidate = page.locator(".post-candidate");
-  await expect(candidate).toContainText("원문 대조 통과");
-  const summary = page.getByLabel("기사 요약 글", { exact: true });
-  await expect(summary).toHaveValue("");
-  await page.locator(".editor").screenshot({
-    path: `${process.env.E2E_ARTIFACT_DIR}/post-text-candidate.png`,
-  });
+  // An empty field takes the generated text directly, no candidate box.
   const applied = page.waitForResponse((r) =>
     r.url().endsWith("/post-text/apply"),
   );
-  await candidate.getByRole("button", { name: "이 후보 적용" }).click();
+  await page.getByRole("button", { name: "생성", exact: true }).click();
+  const candidate = page.locator(".post-candidate");
+  const summary = page.getByLabel("기사 요약 글", { exact: true });
   let p = await (await applied).json();
   expect(p.postText.summary).toMatchObject({
     provenance: "generated",
@@ -88,7 +83,17 @@ test("four formats: full without AI, summary and bullets via candidates, export 
   });
   expect(p.renderRevision).toBe(p.revision);
   await expect(summary).toHaveValue(p.postText.summary.text);
+  await expect(candidate).toHaveCount(0);
   await expect(page.locator(".post-review")).toContainText("원문 대조 통과");
+
+  // With text in the field, a new run is a candidate to compare first.
+  await page.getByRole("button", { name: "다시 생성" }).click();
+  await expect(candidate).toContainText("원문 대조 통과");
+  await expect(summary).toHaveValue(p.postText.summary.text);
+  await page.locator(".editor").screenshot({
+    path: `${process.env.E2E_ARTIFACT_DIR}/post-text-candidate.png`,
+  });
+  await candidate.getByRole("button", { name: "버리기" }).click();
 
   // Editing drops the review; the server decides, not the browser.
   await summary.fill(p.postText.summary.text + " 직접 덧붙임.");
@@ -103,7 +108,6 @@ test("four formats: full without AI, summary and bullets via candidates, export 
   // Bullets: "소제목\n- 요점\n- 요점".
   await page.getByRole("tab", { name: "불릿 요약" }).click();
   await page.getByRole("button", { name: "생성", exact: true }).click();
-  await candidate.getByRole("button", { name: "이 후보 적용" }).click();
   await expect(page.getByLabel("불릿 요약 글", { exact: true })).toHaveValue(
     /^\[모의\] 핵심 1\n- .+\n- .+\n- .+/,
   );
@@ -307,4 +311,22 @@ test("a post text saved while cards render keeps both the images and the text", 
     },
   });
   expect((await (await again).json()).code).toBe("STALE");
+});
+
+test("an empty field does not take a text that failed the source check", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("통합 원문").fill(source + " 모의검증실패");
+  await expect(page.locator(".progress")).toHaveCount(0);
+  await page.getByRole("button", { name: "03인스타 게시글" }).click();
+  await page.getByRole("button", { name: "생성", exact: true }).click();
+  const candidate = page.locator(".post-candidate");
+  await expect(candidate).toContainText("원문 대조 실패");
+  await expect(page.getByLabel("짧은 캡션 글", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(
+    candidate.getByRole("button", { name: "검토 필요로 적용" }),
+  ).toBeVisible();
 });

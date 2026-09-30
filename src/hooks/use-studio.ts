@@ -27,6 +27,7 @@ import {
 } from "../../shared/editor-drafts";
 import {
   defaultPostOptions,
+  postTextOf,
   type PostFormat,
   type PostOptions,
   type PostText,
@@ -1090,6 +1091,8 @@ export function useStudio() {
         { revision: current.revision, format, options: postOptions[format] },
       );
       setPostJob(project.id, format, { status: "done", request, candidate });
+      if (await fillEmpty(project.id, format, candidate))
+        setPostJob(project.id, format, undefined);
     } catch (e) {
       setPostJob(project.id, format, {
         status: "failed",
@@ -1097,6 +1100,37 @@ export function useStudio() {
         error: (e as Error).message,
       });
     }
+  }
+  /**
+   * An empty field takes the candidate directly. Written text is never
+   * replaced this way (it keeps the candidate box), nor is a locked caption
+   * or a candidate that failed the source check.
+   */
+  async function fillEmpty(
+    projectId: string,
+    format: GenFormat,
+    candidate: PostCandidate,
+  ) {
+    const empty = (p: Project | null) =>
+      !!p &&
+      p.id === projectId &&
+      !postTextOf(p, format).trim() &&
+      !(format === "short" && p.locks.caption);
+    if (candidate.review?.overall === "fail" || !empty(ref.current))
+      return false;
+    let applied = false;
+    await run("생성한 글을 넣는 중", async () => {
+      const current = await flush();
+      if (!empty(current)) return;
+      accept(
+        await api(`/projects/${current.id}/post-text/apply`, "POST", {
+          candidateId: candidate.id,
+          revision: current.revision,
+        }),
+      );
+      applied = true;
+    });
+    return applied;
   }
   function discardPostCandidate(format: GenFormat) {
     if (ref.current) setPostJob(ref.current.id, format, undefined);
