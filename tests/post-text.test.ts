@@ -209,3 +209,22 @@ test("lengths are counted as NFC code points with LF breaks", () => {
   assert.equal(measure("가\r\n나"), 3);
   assert.equal(measure("é"), 1);
 });
+
+test("bullets are written as broadcast-caption noun phrases", async () => {
+  const { generationInstructions, verifyInstructions } =
+    await import("../server/summary");
+  const bullets = generationInstructions.slice(
+    generationInstructions.indexOf("bullets:"),
+  );
+  for (const rule of [
+    "20자 이내",
+    "25자 내외, 최대 30자",
+    "명사형으로 끝낸다",
+    "'~다', '~습니다'",
+    "가운데 점(·)",
+    "감각적·비유적 표현이나 과장은 쓰지 않는다",
+    "메타 표현은 쓰지 않는다",
+  ])
+    assert.ok(bullets.includes(rule), rule);
+  assert.match(verifyInstructions, /자막형 명사구/);
+});
