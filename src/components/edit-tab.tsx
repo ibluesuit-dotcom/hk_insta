@@ -8,6 +8,7 @@ import {
   photoLimit,
   photoPageCount,
   photoStyleOf,
+  frameLines,
 } from "../../shared/model";
 import { PHOTO_STYLES } from "./source-tab";
 import { Studio } from "../hooks/use-studio";
@@ -666,7 +667,7 @@ function FrameFields({ s }: { s: Studio }) {
     s.photoCardField(index - 1, patch);
   const title = card.title ?? "";
   const summary = card.summary ?? "";
-  const lines = summary.split("\n").length;
+  const lines = frameLines(summary).length;
   const missing = (sub: string | undefined, text: string) =>
     !!sub && !text.includes(sub);
   return (
@@ -704,14 +705,18 @@ function FrameFields({ s }: { s: Studio }) {
         aria-label="액자형 요약"
         value={summary}
         maxLength={FRAME_SUMMARY_LIMIT}
-        rows={3}
+        rows={4}
         placeholder={
           "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록"
         }
-        onChange={(e) =>
-          field({ summary: e.target.value.split("\n").slice(0, 3).join("\n") })
-        }
+        onChange={(e) => field({ summary: e.target.value })}
       />
+      {lines > 3 && (
+        <p className="warn" role="alert">
+          요약이 {lines}줄입니다. 3줄로 줄여야 렌더됩니다. 쓴 내용은 그대로
+          보관됩니다.
+        </p>
+      )}
       <label>요약 빨간 강조</label>
       <input
         aria-label="요약 빨간 강조"

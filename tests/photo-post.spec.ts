@@ -143,9 +143,17 @@ test("frame card (1g): chosen for the photo post, title and 3-line summary typed
     .fill(
       "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록\n넷째 줄",
     );
+  // A fourth line is kept as typed, flagged, and refused at render.
   await expect(page.getByLabel("액자형 요약")).toHaveValue(
-    "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록",
+    "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록\n넷째 줄",
   );
+  await expect(page.getByText("요약이 4줄입니다")).toBeVisible();
+  const tooLong = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await page.getByRole("button", { name: /미리보기 갱신/ }).click();
+  expect((await (await tooLong).json()).message).toContain("3줄을 넘습니다");
+  await page
+    .getByLabel("액자형 요약")
+    .fill("코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록");
   await page.getByLabel("요약 빨간 강조").fill("없는 문구");
   await expect(page.getByText("요약에 이 문구가 없어")).toBeVisible();
   await page.getByLabel("요약 빨간 강조").fill("9천선을 다시 돌파");

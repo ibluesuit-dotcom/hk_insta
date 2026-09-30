@@ -7,6 +7,7 @@ import {
   PHOTO_TEXT_LIMIT,
   Project,
   headlineLayout,
+  frameLines,
   isPhotoPage,
   migrateCover,
   type PhotoCard,
@@ -37,42 +38,44 @@ function mark(text: string, highlight: string) {
  * overlapping marks after the first are skipped.
  */
 export function marked(text: string, marks: [string | undefined, string][]) {
-  const spans = marks
-    .flatMap(([sub, cls]) => {
-      const at = sub ? text.indexOf(sub) : -1;
-      return at < 0 ? [] : [{ at, end: at + sub!.length, cls }];
-    })
-    .sort((a, b) => a.at - b.at)
-    .filter((m, i, all) => i === 0 || m.at >= all[i - 1].end);
+  const ranges = marks.flatMap(([sub, cls]) => {
+    const at = sub ? text.indexOf(sub) : -1;
+    return at < 0 ? [] : [{ at, end: at + sub!.length, cls }];
+  });
+  // Cut at every mark boundary; where marks overlap both classes apply.
+  const cuts = [
+    ...new Set([0, text.length, ...ranges.flatMap((r) => [r.at, r.end])]),
+  ].sort((a, b) => a - b);
   let out = "";
-  let pos = 0;
-  for (const m of spans) {
-    out +=
-      escape(text.slice(pos, m.at)) +
-      `<span class="${m.cls}">${escape(text.slice(m.at, m.end))}</span>`;
-    pos = m.end;
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const piece = escape(text.slice(cuts[i], cuts[i + 1]));
+    const classes = ranges
+      .filter((r) => r.at <= cuts[i] && cuts[i + 1] <= r.end)
+      .map((r) => r.cls);
+    out += classes.length
+      ? `<span class="${classes.join(" ")}">${piece}</span>`
+      : piece;
   }
-  return out + escape(text.slice(pos));
+  return out;
 }
 // 1g handoff: warm neutral card, title, the photo in a white frame with a
 // credit pill, and a three-line summary whose breaks the editor sets.
 function frameCardHtml(card: PhotoCard, image: string) {
   const { x, y, zoom } = card.focal;
   const title = (card.title ?? "").trim();
-  const summary = (card.summary ?? "")
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+  // Lines exactly as typed, blank ones included (they keep their height).
+  const summary = frameLines(card.summary).map((l) => l.trim());
   return `<div class="fr">${title ? `<div class="fr-title">${marked(title, [[card.titleHighlight, "fr-red"]])}</div>` : ""}<div class="fr-frame"><div class="fr-inner"><img class="fr-photo" src="${image}" style="object-position:${x}% ${y}%;transform:scale(${zoom});transform-origin:${x}% ${y}%">${card.credit.trim() ? `<span class="fr-credit">${escape(card.credit.trim())}</span>` : ""}</div></div>${
     summary.length
       ? `<p class="fr-summary">${summary
           .map(
             (line) =>
-              `<span class="fr-line">${marked(line, [
-                [card.summaryHighlight, "fr-red"],
-                [card.summaryUnderline, "fr-under"],
-              ])}</span>`,
+              `<span class="fr-line">${
+                marked(line, [
+                  [card.summaryHighlight, "fr-red"],
+                  [card.summaryUnderline, "fr-under"],
+                ]) || "&#8203;"
+              }</span>`,
           )
           .join("<br>")}</p>`
       : ""
@@ -145,6 +148,13 @@ export async function render(p: Project, only?: number) {
         throw Object.assign(new Error(`카드 ${i + 2}의 사진이 없습니다.`), {
           code: "IMAGE",
         });
+      if (
+        pg.photoCard.layout === "frame" &&
+        frameLines(pg.photoCard.summary).length > 3
+      )
+        throw new Error(
+          `카드 ${i + 2}의 요약이 3줄을 넘습니다. 3줄로 줄여 주세요.`,
+        );
       if ([...pg.photoCard.text].length > PHOTO_TEXT_LIMIT)
         throw new Error(
           `카드 ${i + 2}의 사진 문구는 ${PHOTO_TEXT_LIMIT}자 이내로 줄여 주세요.`,

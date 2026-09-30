@@ -78,19 +78,18 @@ export type PhotoStyle = "image" | "caption" | "frame";
 /** What a photo card outputs: photo only, photo + caption, or the frame card. */
 export const photoStyleOf = (card: PhotoCard): PhotoStyle =>
   card.layout === "frame" ? "frame" : card.textVisible ? "caption" : "image";
-/** The card in another style; everything the editor wrote stays stored. */
+/**
+ * The card in another style. Everything the editor wrote stays stored, and
+ * so do the photo's fit and focus: the frame always fills its box with the
+ * same focus, and going back restores the earlier fit.
+ */
 export function withStyle(card: PhotoCard, style: PhotoStyle): PhotoCard {
-  if (style === "frame")
-    return {
-      ...card,
-      layout: "frame",
-      // The frame always fills its box; start from the handoff's focus.
-      ...(card.layout !== "frame" && card.fit !== "cover"
-        ? { fit: "cover", focal: { x: 30, y: 40, zoom: 1 } }
-        : {}),
-    };
+  if (style === "frame") return { ...card, layout: "frame" };
   return { ...card, layout: "overlay", textVisible: style === "caption" };
 }
+/** Summary lines as the editor typed them, any line break style. */
+export const frameLines = (summary = "") =>
+  summary ? summary.replace(/\r\n?/g, "\n").split("\n") : [];
 /**
  * A following card. Text fields stay in place while the card shows a photo,
  * and a photoCard stays stored after switching back, so both round-trip.
@@ -300,11 +299,8 @@ const photoCardSchema = z
     layout: z.enum(["overlay", "frame"]).optional(),
     title: z.string().max(FRAME_TITLE_LIMIT).optional(),
     titleHighlight: z.string().max(FRAME_TITLE_LIMIT).optional(),
-    summary: z
-      .string()
-      .max(FRAME_SUMMARY_LIMIT)
-      .refine((s) => s.split("\n").length <= 3, "요약은 3줄까지입니다.")
-      .optional(),
+    // More than 3 lines is kept as typed and refused at render.
+    summary: z.string().max(FRAME_SUMMARY_LIMIT).optional(),
     summaryHighlight: z.string().max(FRAME_SUMMARY_LIMIT).optional(),
     summaryUnderline: z.string().max(FRAME_SUMMARY_LIMIT).optional(),
   })

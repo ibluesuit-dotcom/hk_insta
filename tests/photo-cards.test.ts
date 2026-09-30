@@ -6,6 +6,7 @@ import {
   cardKind,
   emptyPage,
   expandTextCopy,
+  frameLines,
   mergeCopy,
   projectSchema,
   blankTextPage,
@@ -167,13 +168,13 @@ test("frame card: marks, the 1g layout, style switches keep what was written", (
     marked("코스피 9천 <달성>", [["9천", "fr-red"]]),
     '코스피 <span class="fr-red">9천</span> &lt;달성&gt;',
   );
-  // An overlapping second mark is skipped rather than nesting.
+  // Overlapping marks both apply where they overlap.
   assert.equal(
     marked("가나다라", [
       ["나다", "a"],
       ["다라", "b"],
     ]),
-    '가<span class="a">나다</span>라',
+    '가<span class="a">나</span><span class="a b">다</span><span class="b">라</span>',
   );
   const p = mixed();
   p.copy.pages[1].photoCard = {
@@ -197,6 +198,24 @@ test("frame card: marks, the 1g layout, style switches keep what was written", (
   assert.match(out, /class="fr-credit">사진 연합뉴스/);
   assert.doesNotMatch(out.split("<body>")[1], /pc-text|NEWS BRIEF/);
 
+  // Blank lines keep their place; any line break style counts as a line.
+  p.copy.pages[1].photoCard!.summary = "첫째\r\n\r셋째";
+  const blank = html(p, 2, "", "x");
+  assert.equal(blank.match(/class="fr-line"/g)?.length, 3);
+  assert.match(blank, /class="fr-line">&#8203;</);
+  assert.equal(frameLines("1\r2\r3\r4").length, 4);
+  p.copy.pages[1].photoCard!.summary = "코스피가 무려 6개월만에";
+
+  // Switching designs keeps the photo's fit and focus.
+  const whole = {
+    ...p.copy.pages[1].photoCard!,
+    fit: "contain" as const,
+    focal: { x: 10, y: 20, zoom: 1.5 },
+  };
+  const round = withStyle(withStyle(whole, "frame"), "image");
+  assert.equal(round.fit, "contain");
+  assert.deepEqual(round.focal, { x: 10, y: 20, zoom: 1.5 });
+
   const framed = p.copy.pages[1].photoCard!;
   const back = withStyle(framed, "caption");
   assert.equal(photoStyleOf(back), "caption");
@@ -204,7 +223,8 @@ test("frame card: marks, the 1g layout, style switches keep what was written", (
   assert.equal(photoStyleOf(withStyle(back, "frame")), "frame");
   assert.equal(photoStyleOf(withStyle(back, "image")), "image");
 
+  // Four lines are kept as typed (render refuses them).
   const four = mixed();
   four.copy.pages[1].photoCard = { ...framed, summary: "1\n2\n3\n4" };
-  assert.throws(() => projectSchema.parse(four));
+  assert.doesNotThrow(() => projectSchema.parse(four));
 });
