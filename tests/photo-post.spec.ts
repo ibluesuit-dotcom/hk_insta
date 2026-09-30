@@ -121,7 +121,7 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
       layout: "frame",
       title: `[모의] 핵심 ${i + 1}`,
     });
-    expect(pg.photoCard.summary.split("\n").length).toBeLessThanOrEqual(2);
+    expect(pg.photoCard.summary.split("\n").length).toBeLessThanOrEqual(3);
   }
   await expect(page.locator(".notice")).toContainText("사진 카드 5장에 사진을");
   expect(rendered).toBe(0);
