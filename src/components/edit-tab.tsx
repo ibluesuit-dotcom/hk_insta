@@ -276,7 +276,14 @@ function PhotoCardFields({ s }: { s: Studio }) {
           />
         </div>
       ) : (
-        <>
+        <div className="card-photo-wrap">
+          {/* Replace sits on the photo; a click on the photo moves the focus. */}
+          <FilePick
+            label="사진 교체"
+            className="primary photo-replace"
+            disabled={!!busy}
+            onFile={(file) => s.replaceCardPhoto(i, file)}
+          />
           <div
             className={"card-photo " + (cover ? "cover" : "contain")}
             onPointerDown={(e) => {
@@ -305,16 +312,15 @@ function PhotoCardFields({ s }: { s: Studio }) {
               }
             />
           </div>
-        </>
+          {cover && (
+            <small className="hint">
+              사진을 누르면 그 지점으로 초점이 옮겨집니다. 사진을 바꾸려면 위의
+              ‘사진 교체’를 누르세요.
+            </small>
+          )}
+        </div>
       )}
       <div className="row">
-        {card.photo && (
-          <FilePick
-            label="사진 교체"
-            disabled={!!busy}
-            onFile={(file) => s.replaceCardPhoto(i, file)}
-          />
-        )}
         {!frame && (
           <div className="segmented" role="group" aria-label="사진 맞춤">
             {(
