@@ -1,9 +1,9 @@
 import {
-  PHOTO_CARD_LIMIT,
   PHOTO_TEXT_LIMIT,
   headlineLayout,
   headlineEditorText,
   isPhotoPage,
+  photoLimit,
   photoPageCount,
 } from "../../shared/model";
 import { Studio } from "../hooks/use-studio";
@@ -123,7 +123,7 @@ function CardActions({ s }: { s: Studio }) {
   const page = p?.copy.pages[index - 1];
   if (!p || !page) return null;
   const i = index - 1;
-  const photoFull = !isPhotoPage(page) && photoPageCount(p) >= PHOTO_CARD_LIMIT;
+  const photoFull = !isPhotoPage(page) && photoPageCount(p) >= photoLimit(p);
   return (
     <div className="card-actions">
       {isPhotoPage(page) ? (
@@ -170,7 +170,7 @@ function CardActions({ s }: { s: Studio }) {
       </button>
       {photoFull && (
         <small className="hint">
-          사진 카드는 표지 외 최대 {PHOTO_CARD_LIMIT}장입니다.
+          사진 카드는 표지 외 최대 {photoLimit(p)}장입니다.
         </small>
       )}
     </div>
@@ -182,7 +182,7 @@ function AddCard({ s }: { s: Studio }) {
   const { p, busy } = s;
   if (!p) return null;
   const full = p.count >= 8;
-  const photoFull = photoPageCount(p) >= PHOTO_CARD_LIMIT;
+  const photoFull = photoPageCount(p) >= photoLimit(p);
   return (
     <div className="add-card">
       <strong>＋ 카드 추가</strong>
@@ -200,12 +200,12 @@ function AddCard({ s }: { s: Studio }) {
       </button>
       <small className="hint">
         전체 {p.count + 1}장 · 사진 {photoPageCount(p) + 1}/
-        {PHOTO_CARD_LIMIT + 1}
+        {photoLimit(p) + 1}
         장(표지 포함)
         {full
           ? " · 카드는 표지 외 최대 8장입니다."
           : photoFull
-            ? ` · 사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다.`
+            ? ` · 사진 카드는 표지 외 최대 ${photoLimit(p)}장입니다.`
             : ""}
       </small>
     </div>

@@ -1,4 +1,9 @@
-import { resizePages } from "../../shared/model";
+import {
+  PHOTO_POST_LIMIT,
+  blankTextPage,
+  isPhotoPage,
+  resizePages,
+} from "../../shared/model";
 import { api } from "../api";
 import { keepPageDraftsBelow } from "../format";
 import { Studio } from "../hooks/use-studio";
@@ -18,6 +23,7 @@ export function SourceTab({ s }: { s: Studio }) {
         </div>
         <span className="pill">01 / 원문</span>
       </div>
+      <PostTypeFields s={s} />
       <label>기사 URL</label>
       <div className="row">
         <input
@@ -247,41 +253,45 @@ export function SourceTab({ s }: { s: Studio }) {
           ● 새 방향 미반영 · 전체 또는 선택 필드에 적용하세요.
         </p>
       )}
-      <div className="count-setting">
-        <div>
-          <strong>본문 페이지 수</strong>
-        </div>
-        <select
-          aria-label="본문 페이지 수"
-          value={p.count}
-          onChange={(e) => {
-            const count = Number(e.target.value);
-            if (
-              count < p.count &&
-              !window.confirm(
-                `카드 ${count + 2}~${p.count + 1}을(를) 삭제할까요? 해당 카드의 문안·사진 설정과 잠금이 삭제됩니다${
-                  p.copy.pages.slice(count).some((pg) => pg.kind === "photo")
-                    ? " (사진 카드 포함)"
-                    : ""
-                }. 이전 버전에서 복원할 수 있습니다.`,
+      {p.postType === "photo" ? (
+        <PhotoPostFields s={s} />
+      ) : (
+        <div className="count-setting">
+          <div>
+            <strong>본문 페이지 수</strong>
+          </div>
+          <select
+            aria-label="본문 페이지 수"
+            value={p.count}
+            onChange={(e) => {
+              const count = Number(e.target.value);
+              if (
+                count < p.count &&
+                !window.confirm(
+                  `카드 ${count + 2}~${p.count + 1}을(를) 삭제할까요? 해당 카드의 문안·사진 설정과 잠금이 삭제됩니다${
+                    p.copy.pages.slice(count).some((pg) => pg.kind === "photo")
+                      ? " (사진 카드 포함)"
+                      : ""
+                  }. 이전 버전에서 복원할 수 있습니다.`,
+                )
               )
-            )
-              return;
-            s.persistDrafts(keepPageDraftsBelow(s.draftsRef.current, count));
-            edit((p) => resizePages(p, count));
-            s.setIndex(0);
-          }}
-        >
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-            <option key={n} value={n}>
-              {n}장
-            </option>
-          ))}
-        </select>
-        <span>
-          표지 포함 <b>총 {p.count + 1}장</b>
-        </span>
-      </div>
+                return;
+              s.persistDrafts(keepPageDraftsBelow(s.draftsRef.current, count));
+              edit((p) => resizePages(p, count));
+              s.setIndex(0);
+            }}
+          >
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>
+                {n}장
+              </option>
+            ))}
+          </select>
+          <span>
+            표지 포함 <b>총 {p.count + 1}장</b>
+          </span>
+        </div>
+      )}
       <button
         className="primary full"
         disabled={!!busy}
@@ -290,5 +300,130 @@ export function SourceTab({ s }: { s: Studio }) {
         생성
       </button>
     </>
+  );
+}
+
+/** 게시물 형식: cover + summary text cards, or cover + photos. */
+function PostTypeFields({ s }: { s: Studio }) {
+  const { p, busy } = s;
+  if (!p) return null;
+  const photo = p.postType === "photo";
+  return (
+    <div className="post-type">
+      <strong>게시물 형식</strong>
+      <div className="segmented" role="radiogroup" aria-label="게시물 형식">
+        {(
+          [
+            ["summary", "사진 + 요약 텍스트"],
+            ["photo", "사진 게시물"],
+          ] as const
+        ).map(([type, label]) => (
+          <button
+            key={type}
+            role="radio"
+            aria-checked={(p.postType ?? "summary") === type}
+            className={(p.postType ?? "summary") === type ? "selected" : ""}
+            disabled={!!busy}
+            onClick={() => s.setPostType(type)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <small className="hint">
+        {photo
+          ? `표지 다음에 사진을 최대 ${PHOTO_POST_LIMIT}장(표지 포함 ${PHOTO_POST_LIMIT + 1}장) 넣습니다. AI는 표지 제목·부제만 씁니다.`
+          : "표지 사진·제목 다음에 기사 요약 카드가 이어집니다. 필요한 카드만 02 편집에서 사진으로 바꿀 수 있습니다."}
+      </small>
+    </div>
+  );
+}
+
+/** Photo post: upload the following photos here, choose captions or not. */
+function PhotoPostFields({ s }: { s: Studio }) {
+  const { p, busy } = s;
+  if (!p) return null;
+  const photos = p.copy.pages.filter(isPhotoPage);
+  const texts = p.copy.pages.filter(
+    (pg) => !isPhotoPage(pg) && !blankTextPage(pg),
+  ).length;
+  const room = PHOTO_POST_LIMIT - photos.length;
+  return (
+    <div className="photo-post">
+      <strong>사진 아래 글</strong>
+      <div className="segmented" role="radiogroup" aria-label="사진 아래 글">
+        {(
+          [
+            [false, "이미지만"],
+            [true, "이미지 + 글 직접 입력"],
+          ] as const
+        ).map(([on, label]) => (
+          <button
+            key={label}
+            role="radio"
+            aria-checked={!!p.photoText === on}
+            className={!!p.photoText === on ? "selected" : ""}
+            disabled={!!busy}
+            onClick={() => s.setPhotoText(on)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {p.photoText && (
+        <small className="hint">
+          사진마다 아래에 넣을 글(최대 100자·3줄)은 02 문안·사진 편집에서 직접
+          씁니다.
+        </small>
+      )}
+      <div
+        className="drop"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          s.addPhotoCards(Array.from(e.dataTransfer.files).slice(0, room));
+        }}
+      >
+        <span>▧</span>
+        <strong>
+          {photos.length ? "본문 사진 더 올리기" : "본문 사진 올리기"}
+        </strong>
+        <small>
+          여러 장을 한 번에 고를 수 있습니다 · 사진 {photos.length}/
+          {PHOTO_POST_LIMIT}장(표지 외)
+        </small>
+        <input
+          aria-label="본문 사진 올리기"
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp"
+          disabled={!!busy || room <= 0}
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length > room)
+              s.setError(
+                `사진은 표지 외 ${PHOTO_POST_LIMIT}장까지입니다. ${room}장만 더 올릴 수 있습니다.`,
+              );
+            else s.addPhotoCards(files);
+          }}
+        />
+      </div>
+      {photos.length > 0 && (
+        <div className="photo-strip">
+          {photos.map((pg, i) => (
+            <img
+              key={pg.id ?? i}
+              src={pg.photoCard!.photo}
+              alt={`사진 ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+      <small className="hint">
+        순서 바꾸기·삭제·사진별 글은 02 문안·사진 편집에서 합니다.
+        {texts > 0 ? ` 텍스트 카드 ${texts}장도 함께 있습니다.` : ""}
+      </small>
+    </div>
   );
 }

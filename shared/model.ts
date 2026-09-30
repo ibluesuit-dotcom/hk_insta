@@ -46,8 +46,10 @@ export const copySchema = z.object({
 // AI responses use copySchema/pageSchema as they are; photo cards exist only
 // in the stored project, so the AI can never write a card's kind or photo.
 type AiCopy = z.infer<typeof copySchema>;
-/** Following photo cards allowed; with the cover that makes 4 image cards. */
+/** Following photo cards in a summary post; with the cover, 4 image cards. */
 export const PHOTO_CARD_LIMIT = 3;
+/** Following photo cards in a photo post; with the cover, 6 image cards. */
+export const PHOTO_POST_LIMIT = 5;
 export const PHOTO_TEXT_LIMIT = 100;
 export type PhotoCard = {
   photo: string;
@@ -104,6 +106,13 @@ export interface Project {
   highlightFrom?: number | null;
   /** Full article, summary and bullets post texts plus the export format. */
   postText?: PostText;
+  /**
+   * "summary" (default): cover + summary text cards, photo cards optional.
+   * "photo": cover + photo cards; photoText decides whether each photo
+   * shows a caption the editor writes (AI never writes it).
+   */
+  postType?: "summary" | "photo";
+  photoText?: boolean;
   profile: string;
   profilePhoto: string;
   status: string;
@@ -345,6 +354,8 @@ export const projectSchema = z
     coverRenderRevision: z.number().int().nonnegative().default(0),
     highlightFrom: z.number().int().min(0).max(2).nullable().optional(),
     postText: postTextSchema.optional(),
+    postType: z.enum(["summary", "photo"]).optional(),
+    photoText: z.boolean().optional(),
     profile: draftText,
     profilePhoto: uploadPath,
     status: z.enum([
@@ -414,10 +425,10 @@ export const projectSchema = z
         code: "custom",
         message: "사진 카드에는 사진이 있어야 합니다.",
       });
-    if (photos.length > PHOTO_CARD_LIMIT)
+    if (photos.length > photoLimit(p))
       ctx.addIssue({
         code: "custom",
-        message: `사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다.`,
+        message: `사진 카드는 표지 외 최대 ${photoLimit(p)}장입니다.`,
       });
   });
 // Post texts (the caption and the other formats) are not drawn on any card,
@@ -467,6 +478,14 @@ function canonical(value: unknown): string {
   );
 }
 export const isPhotoPage = (page: Page) => page.kind === "photo";
+export const photoLimit = (p: Pick<Project, "postType">) =>
+  p.postType === "photo" ? PHOTO_POST_LIMIT : PHOTO_CARD_LIMIT;
+/** A text card nobody wrote in yet (a new project starts with one). */
+export const blankTextPage = (page: Page) =>
+  !isPhotoPage(page) &&
+  !page.title.trim() &&
+  !page.body.trim() &&
+  !page.photoCard;
 export const photoPageCount = (p: Project) =>
   p.copy.pages.filter(isPhotoPage).length;
 /** File/label kind of output card i: 0 is the cover. */

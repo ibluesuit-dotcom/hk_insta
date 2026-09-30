@@ -4,6 +4,8 @@ import { AiVariant, sourceHash } from "../../shared/ai-background";
 import {
   PHOTO_CARD_LIMIT,
   Project,
+  blankTextPage,
+  photoLimit,
   emptyPage,
   isPhotoPage,
   movePage,
@@ -668,6 +670,15 @@ export function useStudio() {
           );
         if (
           kind === "generate" &&
+          payload.scope === "all" &&
+          current.postType === "photo" &&
+          !photoPageCount(current)
+        )
+          throw new Error(
+            "사진 게시물은 본문 사진을 1장 이상 올린 뒤 생성하세요. AI는 호출되지 않았습니다.",
+          );
+        if (
+          kind === "generate" &&
           ["all", "headline"].includes(payload.scope) &&
           current.sourceTitle.trim()
         )
@@ -847,20 +858,25 @@ export function useStudio() {
   }
   // Photo cards. A card changes kind only after its photo is uploaded and the
   // change is saved; a cancelled pick or failed upload leaves it as it was.
-  const photoLimitError = () =>
+  const photoLimitError = (p: Project) =>
     new Error(
-      `사진 카드는 표지 외 최대 ${PHOTO_CARD_LIMIT}장입니다. 다른 사진 카드를 텍스트로 되돌리거나 삭제하세요.`,
+      `사진 카드는 표지 외 최대 ${photoLimit(p)}장입니다. 다른 사진 카드를 텍스트로 되돌리거나 삭제하세요.`,
     );
   async function uploadPhoto(file: File): Promise<string> {
     const form = new FormData();
     form.append("file", file);
     return (await api("/photos", "POST", form)).url;
   }
-  const newPhotoCard = (photo: string, kept?: PhotoCard): PhotoCard => ({
+  // In a photo post the "이미지 + 글" choice opens each new card's caption.
+  const newPhotoCard = (
+    photo: string,
+    kept?: PhotoCard,
+    textVisible = false,
+  ): PhotoCard => ({
     fit: "contain",
     focal: { x: 50, y: 50, zoom: 1 },
     text: "",
-    textVisible: false,
+    textVisible,
     credit: "",
     alt: "",
     ...kept,
@@ -874,22 +890,23 @@ export function useStudio() {
    */
   async function saveCardChange(
     label: string,
-    upload: File | undefined,
-    change: (p: Project, photo: string) => void,
+    uploads: File[],
+    change: (p: Project, photos: string[]) => void,
     check: (p: Project) => void = () => {},
   ) {
     return run(label, async () => {
       check(ref.current!);
-      const photo = upload ? await uploadPhoto(upload) : "";
+      const photos: string[] = [];
+      for (const file of uploads) photos.push(await uploadPhoto(file));
       const current = await saveDrafts();
       check(current);
       const next = structuredClone(current);
-      change(next, photo);
+      change(next, photos);
       accept(await api("/projects/" + next.id, "PUT", next));
     });
   }
-  const photoRoom = (p: Project) => {
-    if (photoPageCount(p) >= PHOTO_CARD_LIMIT) throw photoLimitError();
+  const photoRoom = (p: Project, adding = 1) => {
+    if (photoPageCount(p) + adding > photoLimit(p)) throw photoLimitError(p);
   };
   /** Text card i → photo card, with a new file or the photo kept from before. */
   function toPhotoCard(i: number, file?: File) {
@@ -897,23 +914,27 @@ export function useStudio() {
     if (!file && !kept) return;
     return saveCardChange(
       "사진 카드로 바꾸는 중",
-      file,
-      (p, photo) => {
+      file ? [file] : [],
+      (p, [photo]) => {
         const page = p.copy.pages[i];
         page.kind = "photo";
-        page.photoCard = newPhotoCard(photo || kept!.photo, page.photoCard);
+        page.photoCard = newPhotoCard(
+          photo || kept!.photo,
+          page.photoCard,
+          !!p.photoText,
+        );
       },
-      photoRoom,
+      (p) => photoRoom(p),
     );
   }
   /** Photo card i → text card. Its text and photo settings both stay stored. */
   function toTextCard(i: number) {
-    return saveCardChange("텍스트 카드로 바꾸는 중", undefined, (p) => {
+    return saveCardChange("텍스트 카드로 바꾸는 중", [], (p) => {
       p.copy.pages[i].kind = "text";
     });
   }
   function replaceCardPhoto(i: number, file: File) {
-    return saveCardChange("사진 교체 중", file, (p, photo) => {
+    return saveCardChange("사진 교체 중", [file], (p, [photo]) => {
       const page = p.copy.pages[i];
       page.photoCard = newPhotoCard(photo, page.photoCard);
     });
@@ -927,26 +948,81 @@ export function useStudio() {
   }
   /** Appends a text card, or a photo card once its upload succeeds. */
   async function addCard(file?: File) {
+    if (file) return addPhotoCards([file]);
     const ok = await saveCardChange(
-      file ? "사진 카드 추가 중" : "카드 추가 중",
-      file,
-      (p, photo) => {
-        p.copy.pages.push(
-          file
-            ? { ...emptyPage(), kind: "photo", photoCard: newPhotoCard(photo) }
-            : emptyPage(),
-        );
+      "카드 추가 중",
+      [],
+      (p) => {
+        p.copy.pages.push(emptyPage());
         p.count++;
       },
       (p) => {
         if (p.count >= 8) throw new Error("카드는 표지 외 최대 8장입니다.");
-        if (file) photoRoom(p);
       },
     );
     if (ok) setIndex(ref.current!.count);
   }
+  /**
+   * Adds photo cards after all uploads succeed. Untouched blank text cards
+   * (a new project starts with one) make way for them.
+   */
+  async function addPhotoCards(files: File[]) {
+    if (!files.length) return;
+    const room = (p: Project) => {
+      const blanks = p.copy.pages.filter(blankTextPage).length;
+      if (p.count - blanks + files.length > 8)
+        throw new Error("카드는 표지 외 최대 8장입니다.");
+      photoRoom(p, files.length);
+    };
+    const ok = await saveCardChange(
+      files.length > 1 ? `사진 ${files.length}장 추가 중` : "사진 카드 추가 중",
+      files,
+      (p, photos) => {
+        const pages = p.copy.pages.filter((pg) => !blankTextPage(pg));
+        const removed = p.copy.pages.flatMap((pg, i) =>
+          blankTextPage(pg) ? [i] : [],
+        );
+        for (const i of removed.reverse()) removePage(p, i);
+        p.copy.pages = [
+          ...pages,
+          ...photos.map((photo) => ({
+            ...emptyPage(),
+            kind: "photo" as const,
+            photoCard: newPhotoCard(photo, undefined, !!p.photoText),
+          })),
+        ];
+        p.count = p.copy.pages.length;
+      },
+      room,
+    );
+    if (ok) setIndex(ref.current!.count);
+  }
+  /**
+   * Summary post or photo post. A photo post may hold more photos, so going
+   * back is refused while it has more than a summary post allows.
+   */
+  function setPostType(postType: "summary" | "photo") {
+    const p = ref.current;
+    if (!p) return;
+    if (postType === "summary" && photoPageCount(p) > PHOTO_CARD_LIMIT) {
+      setError(
+        `사진이 ${photoPageCount(p)}장이라 '사진 + 요약 텍스트'로 바꿀 수 없습니다. 사진 카드를 ${PHOTO_CARD_LIMIT}장 이하로 줄이세요.`,
+      );
+      return;
+    }
+    edit((p) => ({ ...p, postType }));
+  }
+  /** "이미지만" / "이미지 + 글": shows or hides every photo card's caption. */
+  function setPhotoText(on: boolean) {
+    edit((p) => {
+      p.photoText = on;
+      for (const page of p.copy.pages)
+        if (page.photoCard) page.photoCard.textVisible = on;
+      return p;
+    });
+  }
   async function deleteCard(i: number) {
-    const ok = await saveCardChange("카드 삭제 중", undefined, (p) => {
+    const ok = await saveCardChange("카드 삭제 중", [], (p) => {
       removePage(p, i);
     });
     if (ok) setIndex(Math.min(i + 1, ref.current!.count));
@@ -1175,6 +1251,9 @@ export function useStudio() {
     replaceCardPhoto,
     photoCardField,
     addCard,
+    addPhotoCards,
+    setPostType,
+    setPhotoText,
     deleteCard,
     isPhotoPage,
     ai,

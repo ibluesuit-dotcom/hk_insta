@@ -1666,3 +1666,31 @@ header h1 {
 .post-options {
   margin: 10px 0;
 }
+
+/* Post type (01) */
+.post-type,
+.photo-post {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+}
+.post-type .segmented,
+.photo-post .segmented {
+  flex-wrap: wrap;
+}
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.photo-strip img {
+  width: 64px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #0b1b2b;
+}
+.post-type {
+  margin: 0 0 18px;
+}
