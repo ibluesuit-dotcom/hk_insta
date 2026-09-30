@@ -283,7 +283,7 @@ test("frame card (1g): chosen for the photo post, title and 3-line summary typed
     .fill("코스피가 사상 처음으로 9천선을 돌파했다");
   const failed = page.waitForResponse((r) => r.url().endsWith("/render"));
   await page.getByRole("button", { name: /미리보기 갱신/ }).click();
-  expect((await (await failed).json()).message).toContain("한 줄(96px)");
+  expect((await (await failed).json()).message).toContain("한 줄(86px)");
   const saved = await (await request.get(`/api/projects/${p.id}`)).json();
   expect(saved.copy.pages[0].photoCard.title).toBe(
     "코스피가 사상 처음으로 9천선을 돌파했다",
