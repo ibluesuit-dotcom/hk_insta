@@ -64,7 +64,9 @@ const card = (page: Page, name: "사진형" | "디지털 아트형") =>
 const badge = (page: Page, name: "사진형" | "디지털 아트형") =>
   card(page, name).locator(".ai-badge").first();
 const generateButton = (page: Page) =>
-  picker(page).getByRole("button", { name: /AI로 이미지 생성하기|생성 중/ });
+  picker(page).getByRole("button", {
+    name: /AI로 이미지 생성하기|다른 소재로 다시 생성|생성 중/,
+  });
 const activeId = (page: Page) =>
   page.evaluate(() => sessionStorage.getItem("studio-project")!);
 const isGenerate = (url: string) =>
@@ -506,4 +508,39 @@ test("N4 실패 후 새로고침해도 실패 안내와 이전 후보가 남는�
     failing.kill();
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
+});
+
+test("그림 소재 요청과 '다른 소재로 다시 생성'이 소재 분석 요청에 실린다", async ({
+  page,
+}) => {
+  await open(page, "소재 요청");
+  await picker(page).getByLabel("그림 소재 요청").fill("클린룸의 연구원");
+  const first = page.waitForRequest((r) => isBrief(r.url()));
+  await generateButton(page).click();
+  expect((await first).postDataJSON()).toMatchObject({
+    fresh: false,
+    subjectRequest: "클린룸의 연구원",
+  });
+  await expect(badge(page, "사진형")).not.toHaveText("생성 중…", {
+    timeout: 30_000,
+  });
+  await expect(badge(page, "디지털 아트형")).not.toHaveText("생성 중…", {
+    timeout: 30_000,
+  });
+  await expect(generateButton(page)).toHaveText("다른 소재로 다시 생성");
+  await picker(page).getByLabel("그림 소재 요청").fill("");
+  const again = page.waitForRequest((r) => isBrief(r.url()));
+  await generateButton(page).click();
+  const body = (await again).postDataJSON();
+  expect(body.fresh).toBe(true);
+  expect(body.subjectRequest).toBeUndefined();
+
+  // A wish typed for one project does not follow to the next one.
+  await picker(page)
+    .getByLabel("그림 소재 요청")
+    .fill("다른 작업에 가면 안 됨");
+  await expect(page.locator(".progress")).toHaveCount(0, { timeout: 30_000 });
+  await page.getByRole("button", { name: "+ 새 카드 만들기" }).click();
+  await expect(page.getByLabel("통합 원문")).toHaveValue("");
+  await expect(picker(page).getByLabel("그림 소재 요청")).toHaveValue("");
 });

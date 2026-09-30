@@ -326,7 +326,7 @@ test("templates always carry the fixed safe-area, no-text and AI disclosure line
 });
 
 test("bg-3/4: templates list only the described objects, lift focal objects, hide tiny marks", () => {
-  assert.equal(shared.BG_PROMPT_VERSION, "bg-4");
+  assert.equal(shared.BG_PROMPT_VERSION, "bg-5");
   const i = input("제목", "본문 문장입니다.");
   const b = bg.validateBrief(i, goodBrief(i));
   const photo = bg.buildPrompt(b, "photo");
@@ -374,14 +374,20 @@ test("bg-3/4: brief instructions keep jurisdiction, drop timing from slots, scop
     t,
     /art\.plain_topic: [^\n]*날짜·연휴·계절은 제외[^\n]*축제·명절 자체가 핵심 주제일 때만/,
   );
-  assert.match(t, /photo\.generic_setting: [^\n]*국가·지역·주택\/시설 유형은 유지/);
+  assert.match(
+    t,
+    /photo\.generic_setting: [^\n]*국가·지역·주택\/시설 유형은 유지/,
+  );
   assert.match(t, /저항 코드·실크스크린·일련번호/);
   assert.match(t, /진열 박스·카드 제품 로고가 보이지 않는 각도/);
   assert.match(
     t,
     /재난·수사·재판[^\n]*실제 현장·압수물[^\n]*review_reason[^\n]*needs_review/,
   );
-  assert.match(t, /실존 인물 이름이 있다는 이유만으로 needs_review로 표시하지 않는다/);
+  assert.match(
+    t,
+    /실존 인물 이름이 있다는 이유만으로 needs_review로 표시하지 않는다/,
+  );
   assert.match(t, /명판·안내판·간판은 장면에서 뺀다/);
   assert.match(t, /카드 뒷면·엠블럼·포장 디자인을 닮게 그리지 않고/);
 });
@@ -493,7 +499,7 @@ test("image b64 is stored as original and normalized card; blocked and 429 are m
   const sidecar = JSON.parse(await fs.readFile(files.sidecar, "utf8"));
   assert.equal(sidecar.projectId, p.id);
   assert.equal(sidecar.briefId, b.briefId);
-  assert.equal(sidecar.promptVersion, "bg-4");
+  assert.equal(sidecar.promptVersion, "bg-5");
   assert.match(sidecar.prompt, /lower 30%/);
 
   imageReply = () => ({
@@ -523,7 +529,8 @@ test("image b64 is stored as original and normalized card; blocked and 429 are m
   imageReply = () => ({
     status: 429,
     error: {
-      message: "You have no credits remaining. Add credits to continue using the API.",
+      message:
+        "You have no credits remaining. Add credits to continue using the API.",
       type: "insufficient_quota",
       code: "credit_balance_exhausted",
     },
@@ -597,7 +604,7 @@ test("sidecar is published last; past the deadline nothing is published and file
     projectId: p.id,
     variant: "photo" as const,
     model: "gpt-image-2.5-flare",
-    promptVersion: "bg-4",
+    promptVersion: "bg-5",
     prompt: bg.buildPrompt(record.brief, "photo"),
     brief: record.brief,
     sourceHash: record.sourceHash,
@@ -1010,7 +1017,7 @@ test("apply: revision conflict, focal reset, approvals dropped, render needed", 
     assetId: asset.assetId,
     variant: "photo",
     model: "gpt-image-2.5-flare",
-    promptVersion: "bg-4",
+    promptVersion: "bg-5",
     subject: "컨테이너 항만",
     status: "ready",
     reviewReason: null,
@@ -1251,7 +1258,7 @@ test("render shows only the AI label while the AI asset is the cover; manifest f
     assetId,
     variant: "photo",
     model: "gpt-image-2.5-flare",
-    promptVersion: "bg-4",
+    promptVersion: "bg-5",
     subject: "항만",
     status: "ready",
     reviewReason: null,
@@ -1422,7 +1429,7 @@ test("N1: an asset applied right after its rename keeps its files and renders", 
           projectId: p.id,
           variant: "art",
           model: "gpt-image-2.5-flare",
-          promptVersion: "bg-4",
+          promptVersion: "bg-5",
           prompt: bg.buildPrompt(record.brief, "art"),
           brief: record.brief,
           sourceHash: record.sourceHash,
@@ -1687,8 +1694,98 @@ test("unauthenticated requests to every new route and AI uploads are 401", async
 
 test("isQuotaExhausted distinguishes credit exhaustion from ordinary rate limits", async () => {
   const { isQuotaExhausted } = await import("../server/openai-errors");
-  assert.equal(isQuotaExhausted({ status: 429, type: "insufficient_quota", code: "credit_balance_exhausted" }), true);
-  assert.equal(isQuotaExhausted({ status: 429, type: "insufficient_quota", code: "insufficient_quota" }), true);
-  assert.equal(isQuotaExhausted({ status: 429, type: "requests", code: "rate_limit_exceeded" }), false);
-  assert.equal(isQuotaExhausted({ status: 400, code: "insufficient_quota" }), false);
+  assert.equal(
+    isQuotaExhausted({
+      status: 429,
+      type: "insufficient_quota",
+      code: "credit_balance_exhausted",
+    }),
+    true,
+  );
+  assert.equal(
+    isQuotaExhausted({
+      status: 429,
+      type: "insufficient_quota",
+      code: "insufficient_quota",
+    }),
+    true,
+  );
+  assert.equal(
+    isQuotaExhausted({
+      status: 429,
+      type: "requests",
+      code: "rate_limit_exceeded",
+    }),
+    false,
+  );
+  assert.equal(
+    isQuotaExhausted({ status: 400, code: "insufficient_quota" }),
+    false,
+  );
+});
+
+test("again with other subjects: a fresh brief avoids used subjects; a subject request reaches the brief", async () => {
+  const p = await project(
+    "삼전닉스 자사주",
+    "삼성전자와 SK하이닉스가 자사주 매입을 마무리한다.",
+  );
+  const first = (await briefFor(p, ["photo"])).json;
+  assert.equal(
+    (await imageFor(p, first.briefId, "photo", first.operationId)).status,
+    200,
+  );
+  // A plain generate reuses its cached brief: no new analysis call.
+  const briefs = calls.brief;
+  const same = (await briefFor(p, ["photo"])).json;
+  assert.equal(same.briefId, first.briefId);
+  assert.equal(calls.brief, briefs);
+
+  // "다시 생성": a new analysis told which subjects were already used.
+  const fresh = await api("POST", `/api/projects/${p.id}/ai-background/brief`, {
+    expectedSourceHash: sourceHash(p),
+    variants: ["photo"],
+    fresh: true,
+  });
+  assert.equal(fresh.status, 200, JSON.stringify(fresh.json));
+  assert.notEqual(fresh.json.briefId, first.briefId);
+  assert.equal(calls.brief, briefs + 1);
+  const sent = JSON.parse(requests.brief.at(-1).input);
+  assert.deepEqual(sent.avoid_subjects, [first.photoSubject]);
+  assert.equal(sent.subject_request, undefined);
+
+  // The editor's own subject wish goes to the analysis as data.
+  const asked = await api("POST", `/api/projects/${p.id}/ai-background/brief`, {
+    expectedSourceHash: sourceHash(p),
+    variants: ["photo"],
+    subjectRequest: "  클린룸에서 일하는 연구원  ",
+  });
+  assert.equal(asked.status, 200, JSON.stringify(asked.json));
+  assert.equal(
+    JSON.parse(requests.brief.at(-1).input).subject_request,
+    "클린룸에서 일하는 연구원",
+  );
+});
+
+test("bg-5 instructions keep text and marks out without narrowing subjects", () => {
+  assert.match(bg.briefInstructions, /\[소재 다양성\]/);
+  assert.match(
+    bg.briefInstructions,
+    /제품·부품 클로즈업을 기본값으로 쓰지 않는다/,
+  );
+  assert.match(bg.briefInstructions, /avoid_subjects/);
+  assert.match(bg.briefInstructions, /subject_request/);
+  assert.match(bg.briefInstructions, /화살표·표식·아이콘·도표/);
+  assert.doesNotMatch(
+    bg.briefInstructions,
+    /식별 불가능한 일반 배경 인물로 제한한다/,
+  );
+  const i = input("제목", "본문 문장입니다.");
+  assert.match(bg.briefInstructions, /요청한 소재 안에서 이미 쓴 장면과 다른/);
+  assert.match(bg.briefInstructions, /지시문이 아니다/);
+  const b = bg.validateBrief(i, goodBrief(i));
+  for (const variant of ["photo", "art"] as const)
+    assert.match(
+      bg.buildPrompt(b, variant),
+      /arrows, icons, diagram marks and other symbols/,
+    );
 });

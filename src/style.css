@@ -1548,3 +1548,15 @@ header h1 {
     width: 100%;
   }
 }
+.ai-subject-request {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ai-subject-request span {
+  font-weight: 400;
+  color: #6b7670;
+}
