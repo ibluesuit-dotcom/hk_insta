@@ -51,6 +51,8 @@ export const PHOTO_CARD_LIMIT = 3;
 /** Following photo cards in a photo post; with the cover, 6 image cards. */
 export const PHOTO_POST_LIMIT = 5;
 export const PHOTO_TEXT_LIMIT = 100;
+export const FRAME_TITLE_LIMIT = 30;
+export const FRAME_SUMMARY_LIMIT = 90;
 export type PhotoCard = {
   photo: string;
   fit: "contain" | "cover";
@@ -59,7 +61,36 @@ export type PhotoCard = {
   textVisible: boolean;
   credit: string;
   alt: string;
+  /**
+   * "overlay" (default): the photo fills the card, an optional caption sits
+   * at the bottom. "frame" (1g handoff): title above, the photo in a white
+   * frame, a three-line summary below, all written by the editor.
+   */
+  layout?: "overlay" | "frame";
+  title?: string;
+  titleHighlight?: string;
+  /** Up to 3 lines; line breaks are the editor's, never automatic. */
+  summary?: string;
+  summaryHighlight?: string;
+  summaryUnderline?: string;
 };
+export type PhotoStyle = "image" | "caption" | "frame";
+/** What a photo card outputs: photo only, photo + caption, or the frame card. */
+export const photoStyleOf = (card: PhotoCard): PhotoStyle =>
+  card.layout === "frame" ? "frame" : card.textVisible ? "caption" : "image";
+/** The card in another style; everything the editor wrote stays stored. */
+export function withStyle(card: PhotoCard, style: PhotoStyle): PhotoCard {
+  if (style === "frame")
+    return {
+      ...card,
+      layout: "frame",
+      // The frame always fills its box; start from the handoff's focus.
+      ...(card.layout !== "frame" && card.fit !== "cover"
+        ? { fit: "cover", focal: { x: 30, y: 40, zoom: 1 } }
+        : {}),
+    };
+  return { ...card, layout: "overlay", textVisible: style === "caption" };
+}
 /**
  * A following card. Text fields stay in place while the card shows a photo,
  * and a photoCard stays stored after switching back, so both round-trip.
@@ -113,6 +144,8 @@ export interface Project {
    */
   postType?: "summary" | "photo";
   photoText?: boolean;
+  /** Photo post default for new photo cards: the 1g frame card. */
+  photoFrame?: boolean;
   /** The loaded URL article is part of the source (not just typed in). */
   sourceFromUrl?: boolean;
   profile: string;
@@ -145,6 +178,7 @@ export function blank(): Project {
     sourceSubtitle: "",
     publishedAt: "",
     sourceConfirmed: false,
+    sourceFromUrl: false,
     attachments: [],
     direction: "경제 초보자도 이해할 수 있게, 확인된 사실을 중심으로",
     appliedDirection: "",
@@ -263,6 +297,16 @@ const photoCardSchema = z
     textVisible: z.boolean(),
     credit: z.string().max(100),
     alt: z.string().max(600),
+    layout: z.enum(["overlay", "frame"]).optional(),
+    title: z.string().max(FRAME_TITLE_LIMIT).optional(),
+    titleHighlight: z.string().max(FRAME_TITLE_LIMIT).optional(),
+    summary: z
+      .string()
+      .max(FRAME_SUMMARY_LIMIT)
+      .refine((s) => s.split("\n").length <= 3, "요약은 3줄까지입니다.")
+      .optional(),
+    summaryHighlight: z.string().max(FRAME_SUMMARY_LIMIT).optional(),
+    summaryUnderline: z.string().max(FRAME_SUMMARY_LIMIT).optional(),
   })
   .strict();
 const draftPage = pageSchema
@@ -358,6 +402,7 @@ export const projectSchema = z
     postText: postTextSchema.optional(),
     postType: z.enum(["summary", "photo"]).optional(),
     photoText: z.boolean().optional(),
+    photoFrame: z.boolean().optional(),
     sourceFromUrl: z.boolean().optional(),
     profile: draftText,
     profilePhoto: uploadPath,

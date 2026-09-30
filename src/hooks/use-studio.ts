@@ -14,7 +14,10 @@ import {
   profileOnlyChange,
   removePage,
   renderFresh,
+  photoStyleOf,
+  withStyle,
   type PhotoCard,
+  type PhotoStyle,
 } from "../../shared/model";
 import {
   Drafts,
@@ -868,16 +871,21 @@ export function useStudio() {
     form.append("file", file);
     return (await api("/photos", "POST", form)).url;
   }
-  // In a photo post the "이미지 + 글" choice opens each new card's caption.
+  // New photo cards follow the photo post's design choice.
+  const styleFields = (p: Project): Partial<PhotoCard> =>
+    p.photoFrame
+      ? { layout: "frame", fit: "cover", focal: { x: 30, y: 40, zoom: 1 } }
+      : { textVisible: !!p.photoText };
   const newPhotoCard = (
     photo: string,
     kept?: PhotoCard,
-    textVisible = false,
+    style: Partial<PhotoCard> = {},
   ): PhotoCard => ({
     fit: "contain",
     focal: { x: 50, y: 50, zoom: 1 },
     text: "",
-    textVisible,
+    textVisible: false,
+    ...style,
     credit: "",
     alt: "",
     ...kept,
@@ -922,7 +930,7 @@ export function useStudio() {
         page.photoCard = newPhotoCard(
           photo || kept!.photo,
           page.photoCard,
-          !!p.photoText,
+          styleFields(p),
         );
       },
       (p) => photoRoom(p),
@@ -991,7 +999,7 @@ export function useStudio() {
           ...photos.map((photo) => ({
             ...emptyPage(),
             kind: "photo" as const,
-            photoCard: newPhotoCard(photo, undefined, !!p.photoText),
+            photoCard: newPhotoCard(photo, undefined, styleFields(p)),
           })),
         );
         p.count = p.copy.pages.length;
@@ -1017,19 +1025,34 @@ export function useStudio() {
       p.postType = postType;
       // Photo cards that already show captions keep them: the post-level
       // choice starts from what the cards actually output.
-      if (postType === "photo")
-        p.photoText = p.copy.pages.some(
-          (pg) => isPhotoPage(pg) && pg.photoCard?.textVisible,
+      if (postType === "photo") {
+        const cards = p.copy.pages.flatMap((pg) =>
+          isPhotoPage(pg) && pg.photoCard ? [pg.photoCard] : [],
         );
+        p.photoFrame =
+          cards.length > 0 && cards.every((c) => photoStyleOf(c) === "frame");
+        p.photoText = cards.some((c) => photoStyleOf(c) === "caption");
+      }
       return p;
     });
   }
-  /** "이미지만" / "이미지 + 글": shows or hides every photo card's caption. */
-  function setPhotoText(on: boolean) {
+  /**
+   * 이미지만 / 이미지 + 하단 글 / 제목·사진·요약(액자형) for every photo card.
+   * Written captions, titles and summaries are kept when switching.
+   */
+  function setPhotoStyle(style: PhotoStyle) {
     edit((p) => {
-      p.photoText = on;
+      p.photoText = style === "caption";
+      p.photoFrame = style === "frame";
       for (const page of p.copy.pages)
-        if (page.photoCard) page.photoCard.textVisible = on;
+        if (page.photoCard) page.photoCard = withStyle(page.photoCard, style);
+      return p;
+    });
+  }
+  function setCardStyle(i: number, style: PhotoStyle) {
+    edit((p) => {
+      const page = p.copy.pages[i];
+      if (page.photoCard) page.photoCard = withStyle(page.photoCard, style);
       return p;
     });
   }
@@ -1265,7 +1288,8 @@ export function useStudio() {
     addCard,
     addPhotoCards,
     setPostType,
-    setPhotoText,
+    setPhotoStyle,
+    setCardStyle,
     deleteCard,
     isPhotoPage,
     ai,

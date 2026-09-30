@@ -183,8 +183,12 @@ test("a review goes stale when the publication time or subtitle changes", () => 
 test("a loaded URL article and an attachment are two documents", () => {
   const p = project();
   assert.equal(sourceDocumentCount(p), 0);
-  // A typed but not loaded URL is not an article in the source.
+  // An older project without the record: a filled URL field counts.
+  delete p.sourceFromUrl;
   p.sourceUrl = "https://example.com/a";
+  assert.equal(sourceDocumentCount(p), 1);
+  // A typed but not loaded URL is not an article in the source.
+  p.sourceFromUrl = false;
   assert.equal(sourceDocumentCount(p), 0);
   p.sourceFromUrl = true;
   assert.equal(sourceDocumentCount(p), 1);

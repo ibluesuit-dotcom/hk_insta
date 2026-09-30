@@ -1,11 +1,15 @@
 import {
+  FRAME_SUMMARY_LIMIT,
+  FRAME_TITLE_LIMIT,
   PHOTO_TEXT_LIMIT,
   headlineLayout,
   headlineEditorText,
   isPhotoPage,
   photoLimit,
   photoPageCount,
+  photoStyleOf,
 } from "../../shared/model";
+import { PHOTO_STYLES } from "./source-tab";
 import { Studio } from "../hooks/use-studio";
 import { AiBackgroundPicker } from "./ai-background";
 import { CoverPhotoUpload, Evidence, LockButton, RegenButton } from "./fields";
@@ -199,8 +203,7 @@ function AddCard({ s }: { s: Studio }) {
         텍스트 카드 추가
       </button>
       <small className="hint">
-        전체 {p.count + 1}장 · 사진 {photoPageCount(p) + 1}/
-        {photoLimit(p) + 1}
+        전체 {p.count + 1}장 · 사진 {photoPageCount(p) + 1}/{photoLimit(p) + 1}
         장(표지 포함)
         {full
           ? " · 카드는 표지 외 최대 8장입니다."
@@ -222,6 +225,9 @@ function PhotoCardFields({ s }: { s: Studio }) {
     s.photoCardField(i, patch);
   const showText = card.textVisible || !!card.text;
   const page = p.copy.pages[i];
+  const frame = card.layout === "frame";
+  // The frame card always fills its box.
+  const cover = frame || card.fit === "cover";
   return (
     <div className="photo-card-fields">
       {!!(page.title || page.body) && (
@@ -230,9 +236,26 @@ function PhotoCardFields({ s }: { s: Studio }) {
         </p>
       )}
       <div
-        className={"card-photo " + card.fit}
+        className="segmented card-style"
+        role="radiogroup"
+        aria-label="이 카드 디자인"
+      >
+        {PHOTO_STYLES.map(([value, label]) => (
+          <button
+            key={value}
+            role="radio"
+            aria-checked={photoStyleOf(card) === value}
+            className={photoStyleOf(card) === value ? "selected" : ""}
+            onClick={() => s.setCardStyle(i, value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div
+        className={"card-photo " + (cover ? "cover" : "contain")}
         onPointerDown={(e) => {
-          if (card.fit !== "cover") return;
+          if (!cover) return;
           const r = e.currentTarget.getBoundingClientRect();
           field({
             focal: {
@@ -247,7 +270,7 @@ function PhotoCardFields({ s }: { s: Studio }) {
           src={card.photo}
           alt={card.alt || `카드 ${index + 1} 사진`}
           style={
-            card.fit === "cover"
+            cover
               ? {
                   objectPosition: `${card.focal.x}% ${card.focal.y}%`,
                   transform: `scale(${card.focal.zoom})`,
@@ -263,24 +286,26 @@ function PhotoCardFields({ s }: { s: Studio }) {
           disabled={!!busy}
           onFile={(file) => s.replaceCardPhoto(i, file)}
         />
-        <div className="segmented" role="group" aria-label="사진 맞춤">
-          {(
-            [
-              ["contain", "전체보기"],
-              ["cover", "화면 채우기"],
-            ] as const
-          ).map(([fit, label]) => (
-            <button
-              key={fit}
-              className={card.fit === fit ? "selected" : ""}
-              onClick={() => field({ fit })}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {!frame && (
+          <div className="segmented" role="group" aria-label="사진 맞춤">
+            {(
+              [
+                ["contain", "전체보기"],
+                ["cover", "화면 채우기"],
+              ] as const
+            ).map(([fit, label]) => (
+              <button
+                key={fit}
+                className={card.fit === fit ? "selected" : ""}
+                onClick={() => field({ fit })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      {card.fit === "cover" &&
+      {cover &&
         (["x", "y", "zoom"] as const).map((k) => (
           <label className="slider" key={k}>
             {k === "x" ? "가로 초점" : k === "y" ? "세로 초점" : "확대"}
@@ -300,7 +325,9 @@ function PhotoCardFields({ s }: { s: Studio }) {
             </span>
           </label>
         ))}
-      {showText ? (
+      {frame ? (
+        <FrameFields s={s} />
+      ) : showText ? (
         <>
           <label>
             사진 문구{" "}
@@ -627,5 +654,88 @@ export function HistoryTab({ s }: { s: Studio }) {
         </div>
       ))}
     </>
+  );
+}
+
+/** 1g frame card: title, red highlight, a 3-line summary with its marks. */
+function FrameFields({ s }: { s: Studio }) {
+  const { p, index } = s;
+  const card = p?.copy.pages[index - 1]?.photoCard;
+  if (!p || !card) return null;
+  const field = (patch: Parameters<Studio["photoCardField"]>[1]) =>
+    s.photoCardField(index - 1, patch);
+  const title = card.title ?? "";
+  const summary = card.summary ?? "";
+  const lines = summary.split("\n").length;
+  const missing = (sub: string | undefined, text: string) =>
+    !!sub && !text.includes(sub);
+  return (
+    <div className="frame-fields">
+      <label>
+        제목{" "}
+        <span>
+          {[...title].length} / {FRAME_TITLE_LIMIT}자 · 한 줄
+        </span>
+      </label>
+      <input
+        aria-label="액자형 제목"
+        value={title}
+        maxLength={FRAME_TITLE_LIMIT}
+        placeholder="예: 코스피 9천 달성"
+        onChange={(e) => field({ title: e.target.value })}
+      />
+      <label>제목 빨간 강조</label>
+      <input
+        aria-label="제목 빨간 강조"
+        value={card.titleHighlight ?? ""}
+        placeholder="제목 안의 부분 문구 (예: 9천)"
+        onChange={(e) => field({ titleHighlight: e.target.value })}
+      />
+      {missing(card.titleHighlight, title) && (
+        <p className="warn">제목에 이 문구가 없어 강조가 표시되지 않습니다.</p>
+      )}
+      <label>
+        요약{" "}
+        <span className={lines > 3 ? "warn" : ""}>
+          {lines} / 3줄 · 줄바꿈은 직접 넣습니다
+        </span>
+      </label>
+      <textarea
+        aria-label="액자형 요약"
+        value={summary}
+        maxLength={FRAME_SUMMARY_LIMIT}
+        rows={3}
+        placeholder={
+          "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록"
+        }
+        onChange={(e) =>
+          field({ summary: e.target.value.split("\n").slice(0, 3).join("\n") })
+        }
+      />
+      <label>요약 빨간 강조</label>
+      <input
+        aria-label="요약 빨간 강조"
+        value={card.summaryHighlight ?? ""}
+        placeholder="요약 안의 부분 문구"
+        onChange={(e) => field({ summaryHighlight: e.target.value })}
+      />
+      {missing(card.summaryHighlight, summary) && (
+        <p className="warn">요약에 이 문구가 없어 강조가 표시되지 않습니다.</p>
+      )}
+      <label>요약 밑줄</label>
+      <input
+        aria-label="요약 밑줄"
+        value={card.summaryUnderline ?? ""}
+        placeholder="요약 안의 부분 문구"
+        onChange={(e) => field({ summaryUnderline: e.target.value })}
+      />
+      {missing(card.summaryUnderline, summary) && (
+        <p className="warn">요약에 이 문구가 없어 밑줄이 표시되지 않습니다.</p>
+      )}
+      <small className="hint">
+        강조·밑줄은 한 줄 안의 문구에만 적용됩니다. 사진 출처는 아래 ‘사진
+        출처·설명’에서 넣으면 사진 오른쪽 아래에 표시됩니다.
+      </small>
+    </div>
   );
 }

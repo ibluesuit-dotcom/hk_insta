@@ -86,6 +86,7 @@ type PostProject = {
   sourceTitle: string;
   sourceSubtitle?: string;
   publishedAt?: string;
+  sourceUrl?: string;
   sourceFromUrl?: boolean;
   attachments?: { text: string; error?: string }[];
   postText?: PostText;
@@ -96,7 +97,10 @@ type PostProject = {
  * time can turn "내년" into another year).
  */
 export const articleHash = (
-  p: Pick<PostProject, "source" | "sourceTitle" | "sourceSubtitle" | "publishedAt">,
+  p: Pick<
+    PostProject,
+    "source" | "sourceTitle" | "sourceSubtitle" | "publishedAt"
+  >,
 ) =>
   sha256Hex(
     JSON.stringify([
@@ -108,7 +112,9 @@ export const articleHash = (
   );
 /** Documents combined in the source: the loaded URL article and attachments. */
 export const sourceDocumentCount = (p: PostProject) =>
-  (p.sourceFromUrl ? 1 : 0) +
+  // Projects saved before this was recorded: a filled URL field counts, so
+  // an older URL + file source is never taken for one article.
+  ((p.sourceFromUrl ?? !!p.sourceUrl?.trim()) ? 1 : 0) +
   (p.attachments ?? []).filter((a) => !a.error && a.text.trim()).length;
 export const ONE_ARTICLE_MESSAGE =
   "요약·풀 기사는 한 기사만 지원합니다. 요약할 기사 하나만 원문에 남겨 주세요.";

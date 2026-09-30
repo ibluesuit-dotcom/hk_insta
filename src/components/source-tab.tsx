@@ -1,5 +1,7 @@
 import {
   PHOTO_POST_LIMIT,
+  photoStyleOf,
+  type PhotoStyle,
   blankTextPage,
   isPhotoPage,
   resizePages,
@@ -352,15 +354,17 @@ function PhotoPostFields({ s }: { s: Studio }) {
     (pg) => !isPhotoPage(pg) && !blankTextPage(pg),
   ).length;
   const room = PHOTO_POST_LIMIT - photos.length;
-  // What the photos actually output: all captions shown, all hidden, or mixed.
-  const shown = photos.map((pg) => !!pg.photoCard?.textVisible);
-  const textState = !shown.length
-    ? !!p.photoText
-    : shown.every(Boolean)
-      ? true
-      : shown.some(Boolean)
-        ? null
-        : false;
+  // What the photos actually output: one design for all, or mixed.
+  const styles = photos.map((pg) => photoStyleOf(pg.photoCard!));
+  const style: PhotoStyle | null = !styles.length
+    ? p.photoFrame
+      ? "frame"
+      : p.photoText
+        ? "caption"
+        : "image"
+    : styles.every((x) => x === styles[0])
+      ? styles[0]
+      : null;
   const upload = (files: File[]) => {
     if (files.length > room)
       s.setError(
@@ -370,38 +374,30 @@ function PhotoPostFields({ s }: { s: Studio }) {
   };
   return (
     <div className="photo-post">
-      <strong>사진 아래 글</strong>
-      <div className="segmented" role="radiogroup" aria-label="사진 아래 글">
-        {(
-          [
-            [false, "이미지만"],
-            [true, "이미지 + 글 직접 입력"],
-          ] as const
-        ).map(([on, label]) => (
+      <strong>사진 카드 디자인</strong>
+      <div
+        className="segmented"
+        role="radiogroup"
+        aria-label="사진 카드 디자인"
+      >
+        {PHOTO_STYLES.map(([value, label]) => (
           <button
-            key={label}
+            key={value}
             role="radio"
-            aria-checked={textState === on}
-            className={textState === on ? "selected" : ""}
+            aria-checked={style === value}
+            className={style === value ? "selected" : ""}
             disabled={!!busy}
-            onClick={() => s.setPhotoText(on)}
+            onClick={() => s.setPhotoStyle(value)}
           >
             {label}
           </button>
         ))}
       </div>
-      {textState === null && (
-        <small className="hint">
-          사진마다 글 표시가 다릅니다. 하나를 고르면 모든 사진에 같이
-          적용됩니다.
-        </small>
-      )}
-      {textState === true && (
-        <small className="hint">
-          사진마다 아래에 넣을 글(최대 100자·3줄)은 02 문안·사진 편집에서 직접
-          씁니다.
-        </small>
-      )}
+      <small className="hint">
+        {style === null
+          ? "사진마다 디자인이 다릅니다. 하나를 고르면 모든 사진에 같이 적용됩니다."
+          : PHOTO_STYLE_HELP[style]}
+      </small>
       <div
         className="photo-add"
         onDragOver={(e) => e.preventDefault()}
@@ -457,3 +453,16 @@ function PhotoPostFields({ s }: { s: Studio }) {
     </div>
   );
 }
+
+export const PHOTO_STYLES: [PhotoStyle, string][] = [
+  ["image", "이미지만"],
+  ["caption", "이미지 + 하단 글"],
+  ["frame", "제목·사진·요약 (액자형)"],
+];
+const PHOTO_STYLE_HELP: Record<PhotoStyle, string> = {
+  image: "사진만 카드를 가득 채웁니다.",
+  caption:
+    "사진 아래쪽에 넣을 글(최대 100자·3줄)을 02 문안·사진 편집에서 직접 씁니다.",
+  frame:
+    "위에 제목, 가운데 흰 액자 사진, 아래 3줄 요약이 들어갑니다. 제목·요약은 02 문안·사진 편집에서 직접 씁니다.",
+};

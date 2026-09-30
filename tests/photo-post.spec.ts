@@ -20,7 +20,7 @@ test("photo post: choose it first, upload five photos at once, captions on/off, 
   ).toHaveAttribute("aria-checked", "true");
   await page.getByRole("radio", { name: "사진 게시물" }).click();
   await expect(page.getByLabel("본문 페이지 수")).toHaveCount(0);
-  await page.getByRole("radio", { name: "이미지 + 글 직접 입력" }).click();
+  await page.getByRole("radio", { name: "이미지 + 하단 글" }).click();
 
   // Generating without photos is refused before any AI call.
   await page.getByRole("button", { name: "생성", exact: true }).click();
@@ -93,7 +93,7 @@ test("switching a summary post to a photo post keeps written text cards and show
   await page.getByRole("button", { name: "01원문과 제작 방향" }).click();
   await page.getByRole("radio", { name: "사진 게시물" }).click();
   await expect(
-    page.getByRole("radio", { name: "이미지 + 글 직접 입력" }),
+    page.getByRole("radio", { name: "이미지 + 하단 글" }),
   ).toHaveAttribute("aria-checked", "true");
 
   const again = page.waitForResponse((r) => r.url().endsWith("/generate"));
@@ -108,4 +108,72 @@ test("switching a summary post to a photo post keeps written text cards and show
     text: "부두 풍경",
     textVisible: true,
   });
+});
+
+test("frame card (1g): chosen for the photo post, title and 3-line summary typed, rendered and checked", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("원문 제목", { exact: true }).fill("코스피 9천 달성");
+  await page.getByLabel("통합 원문").fill(source);
+  await page.getByLabel("표지 사진 첨부").setInputFiles(photo);
+  await expect(page.locator(".progress")).toHaveCount(0);
+  await page.getByRole("radio", { name: "사진 게시물" }).click();
+  await page.getByRole("radio", { name: "제목·사진·요약 (액자형)" }).click();
+  await page.getByLabel("사진 추가").setInputFiles(photo);
+  await expect(page.locator(".photo-strip img")).toHaveCount(1);
+  const generated = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await page.getByRole("button", { name: "생성", exact: true }).click();
+  const p = await (await generated).json();
+  expect(p.copy.pages[0].photoCard).toMatchObject({
+    layout: "frame",
+    fit: "cover",
+  });
+
+  await page.getByRole("button", { name: "02문안·사진 편집" }).click();
+  await page.getByRole("button", { name: "사진 1", exact: true }).click();
+  await expect(
+    page.getByRole("radio", { name: "제목·사진·요약 (액자형)" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page.getByLabel("액자형 제목").fill("코스피 9천 달성");
+  await page.getByLabel("제목 빨간 강조").fill("9천");
+  await page
+    .getByLabel("액자형 요약")
+    .fill(
+      "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록\n넷째 줄",
+    );
+  await expect(page.getByLabel("액자형 요약")).toHaveValue(
+    "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록",
+  );
+  await page.getByLabel("요약 빨간 강조").fill("없는 문구");
+  await expect(page.getByText("요약에 이 문구가 없어")).toBeVisible();
+  await page.getByLabel("요약 빨간 강조").fill("9천선을 다시 돌파");
+  await page.getByLabel("요약 밑줄").fill("사상최고가를 기록");
+  await page.locator(".editor").screenshot({
+    path: `${process.env.E2E_ARTIFACT_DIR}/frame-card-editor.png`,
+  });
+
+  const rendered = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await page.getByRole("button", { name: /미리보기 갱신/ }).click();
+  const r = await rendered;
+  expect(r.ok(), await r.text()).toBe(true);
+  const done = await r.json();
+  expect(done.renderRevision).toBe(done.revision);
+  expect(done.copy.pages[0].photoCard).toMatchObject({
+    title: "코스피 9천 달성",
+    summaryUnderline: "사상최고가를 기록",
+  });
+
+  // A title that does not fit one line even at 96px is reported.
+  await page
+    .getByLabel("액자형 제목")
+    .fill("코스피가 사상 처음으로 9천선을 돌파했다");
+  const failed = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await page.getByRole("button", { name: /미리보기 갱신/ }).click();
+  expect((await (await failed).json()).message).toContain("한 줄(96px)");
+  const saved = await (await request.get(`/api/projects/${p.id}`)).json();
+  expect(saved.copy.pages[0].photoCard.title).toBe(
+    "코스피가 사상 처음으로 9천선을 돌파했다",
+  );
 });

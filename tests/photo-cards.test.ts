@@ -10,12 +10,14 @@ import {
   projectSchema,
   blankTextPage,
   keepPages,
+  photoStyleOf,
   removePage,
   textView,
+  withStyle,
   type Page,
   type Project,
 } from "../shared/model";
-import { html } from "../server/render";
+import { html, marked } from "../server/render";
 
 const card = (photo = "/uploads/a.jpg") => ({
   photo,
@@ -158,4 +160,51 @@ test("only an untouched, unlocked text card counts as blank; kept cards keep the
   assert.deepEqual(p.locks, { "page:0": true, kicker: true });
   keepPages(p, []);
   assert.deepEqual(p.locks, { kicker: true });
+});
+
+test("frame card: marks, the 1g layout, style switches keep what was written", () => {
+  assert.equal(
+    marked("코스피 9천 <달성>", [["9천", "fr-red"]]),
+    '코스피 <span class="fr-red">9천</span> &lt;달성&gt;',
+  );
+  // An overlapping second mark is skipped rather than nesting.
+  assert.equal(
+    marked("가나다라", [
+      ["나다", "a"],
+      ["다라", "b"],
+    ]),
+    '가<span class="a">나다</span>라',
+  );
+  const p = mixed();
+  p.copy.pages[1].photoCard = {
+    ...card(),
+    credit: "사진 연합뉴스",
+    layout: "frame",
+    title: "코스피 9천 달성",
+    titleHighlight: "9천",
+    summary:
+      "코스피가 무려 6개월만에\n9천선을 다시 돌파하여\n사상최고가를 기록",
+    summaryHighlight: "9천선을 다시 돌파",
+    summaryUnderline: "사상최고가를 기록",
+  };
+  const out = html(p, 2, "", "data:image/jpeg;base64,xx");
+  assert.match(
+    out,
+    /class="fr-title">코스피 <span class="fr-red">9천<\/span> 달성/,
+  );
+  assert.equal(out.match(/class="fr-line"/g)?.length, 3);
+  assert.match(out, /<span class="fr-under">사상최고가를 기록<\/span>/);
+  assert.match(out, /class="fr-credit">사진 연합뉴스/);
+  assert.doesNotMatch(out.split("<body>")[1], /pc-text|NEWS BRIEF/);
+
+  const framed = p.copy.pages[1].photoCard!;
+  const back = withStyle(framed, "caption");
+  assert.equal(photoStyleOf(back), "caption");
+  assert.equal(back.title, "코스피 9천 달성");
+  assert.equal(photoStyleOf(withStyle(back, "frame")), "frame");
+  assert.equal(photoStyleOf(withStyle(back, "image")), "image");
+
+  const four = mixed();
+  four.copy.pages[1].photoCard = { ...framed, summary: "1\n2\n3\n4" };
+  assert.throws(() => projectSchema.parse(four));
 });
