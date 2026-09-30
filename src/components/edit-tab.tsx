@@ -732,7 +732,15 @@ function FrameFields({ s }: { s: Studio }) {
       <label>
         요약{" "}
         <span className={lines > 3 ? "warn" : ""}>
-          {lines} / 3줄 · 줄바꿈은 직접 넣습니다
+          {lines} / 3줄 ·{" "}
+          <span
+            className={
+              [...summary.replace(/\n/g, "")].length > 30 ? "warn" : ""
+            }
+          >
+            {[...summary.replace(/\n/g, "")].length} / 30자
+          </span>{" "}
+          · 줄바꿈은 직접 넣습니다
         </span>
       </label>
       <textarea
