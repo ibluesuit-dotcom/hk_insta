@@ -82,12 +82,16 @@ test("a text card keeps its stored photo when AI rewrites it", () => {
   assert.equal(merged.pages[0].kind, "text");
 });
 
-test("the schema requires a photo, caps photo cards and refuses AI files", () => {
+test("a photo card may wait for its photo; photo cards are capped and AI files refused", () => {
   const p = mixed();
   assert.doesNotThrow(() => projectSchema.parse(p));
+  // Text first, photo later: saved without a photo, refused only at render.
   const noPhoto = mixed();
   noPhoto.copy.pages[1].photoCard!.photo = "";
-  assert.throws(() => projectSchema.parse(noPhoto));
+  assert.doesNotThrow(() => projectSchema.parse(noPhoto));
+  const noCard = mixed();
+  delete noCard.copy.pages[1].photoCard;
+  assert.throws(() => projectSchema.parse(noCard));
   const ai = mixed();
   ai.copy.pages[1].photoCard!.photo =
     "/uploads/ai-00000000-0000-4000-8000-000000000000.jpg";

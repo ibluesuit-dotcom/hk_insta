@@ -1746,3 +1746,48 @@ header h1 {
     opacity: 1;
   }
 }
+.notice {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: #e7f1e9;
+  color: #30704e;
+  font-size: 13px;
+  font-weight: 600;
+}
+.card-photo.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed #becbc5;
+  background: #f8faf7;
+  color: #6b7670;
+  font-size: 13px;
+}
+.card-photo.empty .file-pick.primary {
+  background: #c8102e;
+  border-color: #c8102e;
+  color: white;
+  padding: 8px 14px;
+  font-weight: 700;
+}
+.page-tabs button.empty {
+  border-style: dashed;
+}
+.photo-strip .thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 80px;
+  border: 1px dashed #becbc5;
+  border-radius: 4px;
+  background: #f8faf7;
+  color: #6b7670;
+  font-weight: 700;
+}
+.photo-count {
+  flex-wrap: wrap;
+}

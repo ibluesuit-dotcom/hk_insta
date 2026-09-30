@@ -44,6 +44,8 @@ test("photo post: choose it first, upload five photos at once, captions on/off, 
   expect(p.renders).toHaveLength(6);
   expect(p.copy.pages.every((pg: any) => pg.kind === "photo")).toBe(true);
   expect(p.copy.pages.every((pg: any) => pg.photoCard.textVisible)).toBe(true);
+  // Outside "AI추천 문구" the editor writes card text; generation leaves it.
+  expect(p.copy.pages.every((pg: any) => !pg.photoCard.text)).toBe(true);
   expect(p.copy.headline).toBe("금리와 수출 동향");
 
   // "이미지 + 글": each photo card opens its caption field in 02.
@@ -67,6 +69,108 @@ test("photo post: choose it first, upload five photos at once, captions on/off, 
       return q.copy.pages.map((pg: any) => pg.photoCard.textVisible);
     })
     .toEqual([false, false, false, false, false]);
+});
+
+test("AI추천 문구: card count first, titles and summaries generated first, photos attached in 02", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("원문 제목", { exact: true }).fill("금리와 수출 동향");
+  await page.getByLabel("통합 원문").fill(source);
+  await page.getByLabel("표지 사진 첨부").setInputFiles(photo);
+  await expect(page.locator(".progress")).toHaveCount(0);
+
+  // The summary post is the default; the photo post swaps the page count.
+  await expect(
+    page.getByRole("radio", { name: "사진 + 요약 텍스트" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: "사진 게시물" }).click();
+  await expect(page.getByLabel("본문 페이지 수")).toHaveCount(0);
+  await page
+    .getByRole("radio", { name: "제목·사진·요약 (AI추천 문구)" })
+    .click();
+  await expect(page.getByLabel("사진 추가")).toHaveCount(0);
+
+  // Without a card count, generating is refused before any AI call.
+  await page.getByRole("button", { name: "생성", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("사진 카드 수를 먼저");
+
+  // Five cards, no photos yet: numbered empty slots.
+  await page.getByRole("radio", { name: "5장" }).click();
+  await expect(page.locator(".photo-strip .thumb-empty")).toHaveCount(5);
+  await page.locator(".editor").screenshot({
+    path: `${process.env.E2E_ARTIFACT_DIR}/photo-post-source.png`,
+  });
+
+  // Text first: the cover and each card's text, and no render yet.
+  let rendered = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/render")) rendered++;
+  });
+  const generated = page.waitForResponse((r) => r.url().endsWith("/generate"));
+  await page.getByRole("button", { name: "생성", exact: true }).click();
+  const p = await (await generated).json();
+  expect(p.postType).toBe("photo");
+  expect(p.count).toBe(5);
+  expect(p.copy.headline).toBe("금리와 수출 동향");
+  for (const [i, pg] of p.copy.pages.entries()) {
+    expect(pg.kind).toBe("photo");
+    expect(pg.photoCard).toMatchObject({
+      photo: "",
+      layout: "frame",
+      title: `[모의] 핵심 ${i + 1}`,
+    });
+    expect(pg.photoCard.summary.split("\n").length).toBeLessThanOrEqual(2);
+  }
+  await expect(page.locator(".notice")).toContainText("사진 카드 5장에 사진을");
+  expect(rendered).toBe(0);
+
+  // 02 opened on the first card, which asks for its photo.
+  await expect(
+    page.getByRole("button", { name: "사진 1", exact: true }),
+  ).toHaveClass(/selected/);
+  await expect(page.getByLabel("액자형 제목")).toHaveValue("[모의] 핵심 1");
+  await expect(page.getByLabel("액자형 요약")).toHaveValue(
+    p.copy.pages[0].photoCard.summary,
+  );
+  const render = () => page.getByRole("button", { name: /미리보기 갱신/ });
+  const refused = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await render().click();
+  expect((await (await refused).json()).message).toContain(
+    "사진을 넣어 주세요",
+  );
+  for (let n = 1; n <= 5; n++) {
+    await page.getByRole("button", { name: `사진 ${n}`, exact: true }).click();
+    await expect(page.locator(".progress")).toHaveCount(0);
+    await page.getByLabel("사진 넣기").setInputFiles(photo);
+    await expect(page.getByLabel("사진 교체")).toBeVisible();
+  }
+  // The text written before the photo is kept.
+  const withPhotos = await (await request.get(`/api/projects/${p.id}`)).json();
+  expect(withPhotos.copy.pages[0].photoCard.summary).toBe(
+    p.copy.pages[0].photoCard.summary,
+  );
+  const done = page.waitForResponse((r) => r.url().endsWith("/render"));
+  await render().click();
+  const r = await done;
+  expect(r.ok(), await r.text()).toBe(true);
+  expect((await r.json()).renders).toHaveLength(6);
+
+  // Back to a summary post is refused while it holds more than 3 photos.
+  await page.getByRole("button", { name: "01원문과 제작 방향" }).click();
+  await page.getByRole("radio", { name: "사진 + 요약 텍스트" }).click();
+  await expect(page.getByRole("alert")).toContainText("3장 이하로");
+
+  // Fewer cards drops them from the end, after asking.
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("radio", { name: "3장" }).click();
+  await expect(page.locator(".photo-strip .thumb")).toHaveCount(3);
+
+  // Other designs go back to uploading photos first.
+  await page.getByRole("radio", { name: "이미지만" }).click();
+  await expect(page.getByLabel("사진 추가")).toBeVisible();
+  await expect(page.getByRole("radio", { name: "3장" })).toHaveCount(0);
 });
 
 test("switching a summary post to a photo post keeps written text cards and shown captions", async ({

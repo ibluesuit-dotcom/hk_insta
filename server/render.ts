@@ -145,7 +145,7 @@ export async function render(p: Project, only?: number) {
   for (const [i, pg] of p.copy.pages.entries())
     if (selected(i) && isPhotoPage(pg)) {
       if (!pg.photoCard?.photo)
-        throw Object.assign(new Error(`카드 ${i + 2}의 사진이 없습니다.`), {
+        throw Object.assign(new Error(`카드 ${i + 2}에 사진을 넣어 주세요.`), {
           code: "IMAGE",
         });
       if (

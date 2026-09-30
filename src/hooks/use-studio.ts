@@ -11,6 +11,7 @@ import {
   isPhotoPage,
   movePage,
   photoPageCount,
+  photosMissing,
   profileOnlyChange,
   removePage,
   renderFresh,
@@ -148,6 +149,8 @@ export function useStudio() {
   const [tab, setTab] = useState("source");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  // A one-off guidance message after an action (not an error).
+  const [notice, setNotice] = useState("");
   // Unsaved caption from an earlier session that could not be applied safely.
   const [captionConflict, setCaptionConflict] = useState<string | null>(null);
   const serverCaption = useRef("");
@@ -616,6 +619,7 @@ export function useStudio() {
     busyRef.current = true;
     setBusy(label);
     setError("");
+    setNotice("");
     try {
       await fn();
       return true;
@@ -680,7 +684,9 @@ export function useStudio() {
           !photoPageCount(current)
         )
           throw new Error(
-            "사진 게시물은 본문 사진을 1장 이상 올린 뒤 생성하세요. AI는 호출되지 않았습니다.",
+            current.photoAi
+              ? "사진 카드 수를 먼저 정한 뒤 생성하세요. AI는 호출되지 않았습니다."
+              : "사진 게시물은 본문 사진을 1장 이상 올린 뒤 생성하세요. AI는 호출되지 않았습니다.",
           );
         if (
           kind === "generate" &&
@@ -732,6 +738,24 @@ export function useStudio() {
           throw new Error(
             "처리 중 편집된 내용이 있어 결과를 적용하지 않았습니다. 저장 후 다시 시도하세요.",
           );
+        }
+        // Photo post, text first: cards still waiting for photos are not
+        // rendered; the editor attaches them in 02.
+        if (
+          kind === "generate" &&
+          payload.scope === "all" &&
+          photosMissing(result)
+        ) {
+          const first = result.copy.pages.findIndex(
+            (pg: Project["copy"]["pages"][number]) =>
+              isPhotoPage(pg) && !pg.photoCard?.photo,
+          );
+          setNotice(
+            `글을 만들었습니다. 02 문안·사진 편집에서 사진 카드 ${photosMissing(result)}장에 사진을 넣은 뒤 ‘미리보기 갱신’을 누르세요.`,
+          );
+          setTab("edit");
+          setIndex(first + 1);
+          return;
         }
         if (kind === "generate" && payload.scope === "all") {
           try {
@@ -1038,13 +1062,41 @@ export function useStudio() {
     });
   }
   /**
+   * Photo post: the number of photo cards, chosen before any photo. New
+   * cards wait for their photo; untouched blank text cards make way. Cards
+   * past the new number go from the end.
+   */
+  function setPhotoCardCount(n: number) {
+    return saveCardChange("사진 카드 수 바꾸는 중", [], (p) => {
+      const photoAt = p.copy.pages.flatMap((pg, i) =>
+        isPhotoPage(pg) ? [i] : [],
+      );
+      const drop = new Set(photoAt.slice(n));
+      keepPages(
+        p,
+        p.copy.pages.flatMap((pg, i) =>
+          drop.has(i) || blankTextPage(pg, !!p.locks[`page:${i}`]) ? [] : [i],
+        ),
+      );
+      for (let k = photoAt.length; k < n; k++)
+        p.copy.pages.push({
+          ...emptyPage(),
+          kind: "photo",
+          photoCard: newPhotoCard("", undefined, styleFields(p)),
+        });
+      if (!p.copy.pages.length) p.copy.pages.push(emptyPage());
+      p.count = p.copy.pages.length;
+    });
+  }
+  /**
    * 이미지만 / 이미지 + 하단 글 / 제목·사진·요약(액자형) for every photo card.
    * Written captions, titles and summaries are kept when switching.
    */
-  function setPhotoStyle(style: PhotoStyle) {
+  function setPhotoStyle(style: PhotoStyle, ai = false) {
     edit((p) => {
       p.photoText = style === "caption";
       p.photoFrame = style === "frame";
+      p.photoAi = style === "frame" && ai;
       for (const page of p.copy.pages)
         if (page.photoCard) page.photoCard = withStyle(page.photoCard, style);
       return p;
@@ -1328,6 +1380,9 @@ export function useStudio() {
     photoCardField,
     addCard,
     addPhotoCards,
+    setPhotoCardCount,
+    notice,
+    setNotice,
     setPostType,
     setPhotoStyle,
     setCardStyle,

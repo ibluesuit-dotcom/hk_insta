@@ -29,11 +29,23 @@ export function EditTab({ s }: { s: Studio }) {
         </div>
         <span className="pill">02 / 편집</span>
       </div>
+      {s.notice && (
+        <p className="notice" role="status">
+          {s.notice}
+        </p>
+      )}
       <div className="page-tabs">
         {Array.from({ length: p.count + 1 }, (_, i) => (
           <button
             key={i}
-            className={index === i ? "selected" : ""}
+            className={
+              (index === i ? "selected" : "") +
+              (i > 0 &&
+              isPhotoPage(p.copy.pages[i - 1]) &&
+              !p.copy.pages[i - 1].photoCard?.photo
+                ? " empty"
+                : "")
+            }
             onClick={() => setIndex(i)}
           >
             {i === 0
@@ -253,40 +265,56 @@ function PhotoCardFields({ s }: { s: Studio }) {
           </button>
         ))}
       </div>
-      <div
-        className={"card-photo " + (cover ? "cover" : "contain")}
-        onPointerDown={(e) => {
-          if (!cover) return;
-          const r = e.currentTarget.getBoundingClientRect();
-          field({
-            focal: {
-              ...card.focal,
-              x: Math.round(((e.clientX - r.left) / r.width) * 100),
-              y: Math.round(((e.clientY - r.top) / r.height) * 100),
-            },
-          });
-        }}
-      >
-        <img
-          src={card.photo}
-          alt={card.alt || `카드 ${index + 1} 사진`}
-          style={
-            cover
-              ? {
-                  objectPosition: `${card.focal.x}% ${card.focal.y}%`,
-                  transform: `scale(${card.focal.zoom})`,
-                  transformOrigin: `${card.focal.x}% ${card.focal.y}%`,
-                }
-              : undefined
-          }
-        />
-      </div>
+      {!card.photo ? (
+        <div className="card-photo empty">
+          <span>사진을 넣어 주세요</span>
+          <FilePick
+            label="사진 넣기"
+            className="primary"
+            disabled={!!busy}
+            onFile={(file) => s.replaceCardPhoto(i, file)}
+          />
+        </div>
+      ) : (
+        <>
+          <div
+            className={"card-photo " + (cover ? "cover" : "contain")}
+            onPointerDown={(e) => {
+              if (!cover) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              field({
+                focal: {
+                  ...card.focal,
+                  x: Math.round(((e.clientX - r.left) / r.width) * 100),
+                  y: Math.round(((e.clientY - r.top) / r.height) * 100),
+                },
+              });
+            }}
+          >
+            <img
+              src={card.photo}
+              alt={card.alt || `카드 ${index + 1} 사진`}
+              style={
+                cover
+                  ? {
+                      objectPosition: `${card.focal.x}% ${card.focal.y}%`,
+                      transform: `scale(${card.focal.zoom})`,
+                      transformOrigin: `${card.focal.x}% ${card.focal.y}%`,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </>
+      )}
       <div className="row">
-        <FilePick
-          label="사진 교체"
-          disabled={!!busy}
-          onFile={(file) => s.replaceCardPhoto(i, file)}
-        />
+        {card.photo && (
+          <FilePick
+            label="사진 교체"
+            disabled={!!busy}
+            onFile={(file) => s.replaceCardPhoto(i, file)}
+          />
+        )}
         {!frame && (
           <div className="segmented" role="group" aria-label="사진 맞춤">
             {(

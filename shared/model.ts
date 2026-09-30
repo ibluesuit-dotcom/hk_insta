@@ -145,6 +145,11 @@ export interface Project {
   photoText?: boolean;
   /** Photo post default for new photo cards: the 1g frame card. */
   photoFrame?: boolean;
+  /**
+   * Photo post "AI추천 문구": the card count is chosen first, card titles and
+   * summaries are generated, photos are attached afterwards.
+   */
+  photoAi?: boolean;
   /** The loaded URL article is part of the source (not just typed in). */
   sourceFromUrl?: boolean;
   profile: string;
@@ -399,6 +404,7 @@ export const projectSchema = z
     postType: z.enum(["summary", "photo"]).optional(),
     photoText: z.boolean().optional(),
     photoFrame: z.boolean().optional(),
+    photoAi: z.boolean().optional(),
     sourceFromUrl: z.boolean().optional(),
     profile: draftText,
     profilePhoto: uploadPath,
@@ -464,10 +470,12 @@ export const projectSchema = z
         message: "본문 장수와 페이지 또는 잠금을 확인하세요.",
       });
     const photos = p.copy.pages.filter(isPhotoPage);
-    if (photos.some((pg) => !pg.photoCard?.photo))
+    // A photo card may wait for its photo (text first, photo later); it is
+    // refused only at render.
+    if (photos.some((pg) => !pg.photoCard))
       ctx.addIssue({
         code: "custom",
-        message: "사진 카드에는 사진이 있어야 합니다.",
+        message: "사진 카드 정보가 없습니다.",
       });
     if (photos.length > photoLimit(p))
       ctx.addIssue({
@@ -553,6 +561,9 @@ export function keepPages(p: Project, keep: number[]) {
 }
 export const photoPageCount = (p: Project) =>
   p.copy.pages.filter(isPhotoPage).length;
+/** Photo cards still waiting for their photo. */
+export const photosMissing = (p: Project) =>
+  p.copy.pages.filter((pg) => isPhotoPage(pg) && !pg.photoCard?.photo).length;
 /** File/label kind of output card i: 0 is the cover. */
 export function cardKind(p: Project, i: number): "cover" | "body" | "photo" {
   if (i === 0) return "cover";

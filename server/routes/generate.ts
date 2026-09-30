@@ -5,10 +5,12 @@ import {
   expandTextCopy,
   isPhotoPage,
   mergeCopy,
+  photoPageCount,
   textView,
 } from "../../shared/model";
 import { read, save, mutate } from "../store";
 import { generate } from "../ai";
+import { generatePhotoTexts } from "../summary";
 import { wrap } from "../http";
 
 // AI copy generation, applied only if the project did not change meanwhile.
@@ -66,12 +68,21 @@ generateRouter.post(
     if (scope === "pages" && !map.length)
       throw new Error("AI로 작성할 텍스트 카드가 없습니다.");
     let result;
+    let cardTexts: Awaited<ReturnType<typeof generatePhotoTexts>> = [];
     try {
       result = await generate(
         view,
         viewScope,
         String(req.body.extra || "").slice(0, 2000),
       );
+      // A photo post writes its photo cards' text now; photos come later.
+      if (
+        p.postType === "photo" &&
+        p.photoAi &&
+        scope === "all" &&
+        photoPageCount(p)
+      )
+        cardTexts = await generatePhotoTexts(p, photoPageCount(p));
     } catch (e) {
       // AI_QUOTA 처럼 이미 구분된 코드는 유지하고, 나머지만 일반 AI 오류로 묶는다.
       const err = e as Error & { code?: string };
@@ -94,6 +105,18 @@ generateRouter.post(
           mergeCopy(view, result.copy, viewScope),
           map,
         );
+        // Only empty fields are filled: what the editor wrote stays.
+        copy.pages.filter(isPhotoPage).forEach((page, i) => {
+          const t = cardTexts[i];
+          const card = page.photoCard;
+          if (!t || !card) return;
+          if (!card.title?.trim()) {
+            card.title = t.title;
+            card.titleHighlight = t.titleHighlight;
+          }
+          if (!card.summary?.trim()) card.summary = t.lines.join("\n");
+          if (!card.text.trim()) card.text = t.lines.join(" ");
+        });
         if (scope !== "all" && scope !== "keywords") return { ...p, copy };
         return save(
           {

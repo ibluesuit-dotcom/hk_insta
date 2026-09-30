@@ -345,7 +345,12 @@ function PostTypeFields({ s }: { s: Studio }) {
   );
 }
 
-/** Photo post: upload the following photos here, choose captions or not. */
+/**
+ * Photo post. The first three designs upload photos here first (one card per
+ * photo) and the editor writes any text. "AI추천 문구" picks the number of
+ * cards first, generates each card's title and summary, and the photos are
+ * attached in 02.
+ */
 function PhotoPostFields({ s }: { s: Studio }) {
   const { p, busy } = s;
   if (!p) return null;
@@ -354,6 +359,7 @@ function PhotoPostFields({ s }: { s: Studio }) {
     (pg) => !isPhotoPage(pg) && !blankTextPage(pg),
   ).length;
   const room = PHOTO_POST_LIMIT - photos.length;
+  const ai = !!p.photoAi;
   // What the photos actually output: one design for all, or mixed.
   const styles = photos.map((pg) => photoStyleOf(pg.photoCard!));
   const style: PhotoStyle | null = !styles.length
@@ -365,6 +371,7 @@ function PhotoPostFields({ s }: { s: Studio }) {
     : styles.every((x) => x === styles[0])
       ? styles[0]
       : null;
+  const chosen = style === "frame" && ai ? "frame-ai" : style;
   const upload = (files: File[]) => {
     if (files.length > room)
       s.setError(
@@ -380,61 +387,116 @@ function PhotoPostFields({ s }: { s: Studio }) {
         role="radiogroup"
         aria-label="사진 카드 디자인"
       >
-        {PHOTO_STYLES.map(([value, label]) => (
+        {PHOTO_POST_DESIGNS.map(([key, style, label]) => (
           <button
-            key={value}
+            key={key}
             role="radio"
-            aria-checked={style === value}
-            className={style === value ? "selected" : ""}
+            aria-checked={chosen === key}
+            className={chosen === key ? "selected" : ""}
             disabled={!!busy}
-            onClick={() => s.setPhotoStyle(value)}
+            onClick={() => s.setPhotoStyle(style, key === "frame-ai")}
           >
             {label}
           </button>
         ))}
       </div>
       <small className="hint">
-        {style === null
+        {chosen === null
           ? "사진마다 디자인이 다릅니다. 하나를 고르면 모든 사진에 같이 적용됩니다."
-          : PHOTO_STYLE_HELP[style]}
+          : chosen === "frame-ai"
+            ? "사진 카드 수를 정하고 ‘생성’을 누르면 AI가 카드마다 제목과 중요 내용(30자 이내)을 먼저 씁니다. 사진은 02 문안·사진 편집에서 넣습니다."
+            : PHOTO_STYLE_HELP[chosen]}
       </small>
-      <div
-        className="photo-add"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          upload(Array.from(e.dataTransfer.files));
-        }}
-      >
-        <label
-          className={`file-pick primary ${busy || room <= 0 ? "disabled" : ""}`}
+      {ai ? (
+        <>
+          <strong>사진 카드 수</strong>
+          <div
+            className="segmented photo-count"
+            role="radiogroup"
+            aria-label="사진 카드 수"
+          >
+            {Array.from({ length: PHOTO_POST_LIMIT }, (_, k) => k + 1).map(
+              (n) => (
+                <button
+                  key={n}
+                  role="radio"
+                  aria-checked={photos.length === n}
+                  className={photos.length === n ? "selected" : ""}
+                  disabled={!!busy}
+                  onClick={() => {
+                    const dropped = photos
+                      .slice(n)
+                      .filter(
+                        (pg) =>
+                          pg.photoCard?.photo ||
+                          [
+                            pg.photoCard?.text,
+                            pg.photoCard?.title,
+                            pg.photoCard?.summary,
+                          ].some((t) => t?.trim()),
+                      ).length;
+                    if (
+                      dropped &&
+                      !window.confirm(
+                        `뒤쪽 사진 카드 ${photos.length - n}장이 빠집니다. 사진이나 글이 있는 카드 ${dropped}장도 함께 빠집니다. 이전 버전에서 복원할 수 있습니다.`,
+                      )
+                    )
+                      return;
+                    s.setPhotoCardCount(n);
+                  }}
+                >
+                  {n}장
+                </button>
+              ),
+            )}
+          </div>
+          <small className="hint">
+            {photos.length
+              ? `표지 포함 ${photos.length + 1}장.`
+              : "사진 카드를 몇 장으로 할지 먼저 고르세요."}
+            {texts > 0 ? ` 텍스트 카드 ${texts}장도 함께 있습니다.` : ""}
+          </small>
+        </>
+      ) : (
+        <div
+          className="photo-add"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            upload(Array.from(e.dataTransfer.files));
+          }}
         >
-          ＋ 사진 추가
-          <input
-            aria-label="사진 추가"
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp"
-            disabled={!!busy || room <= 0}
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              e.target.value = "";
-              upload(files);
-            }}
-          />
-        </label>
-        <span>
-          <b>
-            사진 {photos.length}/{PHOTO_POST_LIMIT}장
-          </b>{" "}
-          (표지 외)
-        </span>
-        <small className="hint">
-          {room > 0
-            ? "여러 장을 한 번에 고르거나 여기에 끌어다 놓으세요 · JPG·PNG·WebP"
-            : "사진을 모두 채웠습니다. 바꾸려면 02 편집에서 삭제하세요."}
-        </small>
-      </div>
+          <label
+            className={`file-pick primary ${busy || room <= 0 ? "disabled" : ""}`}
+          >
+            ＋ 사진 추가
+            <input
+              aria-label="사진 추가"
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              disabled={!!busy || room <= 0}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                upload(files);
+              }}
+            />
+          </label>
+          <span>
+            <b>
+              사진 {photos.length}/{PHOTO_POST_LIMIT}장
+            </b>{" "}
+            (표지 외)
+          </span>
+          <small className="hint">
+            {room > 0
+              ? "여러 장을 한 번에 고르거나 여기에 끌어다 놓으세요 · JPG·PNG·WebP"
+              : "사진을 모두 채웠습니다. 바꾸려면 사진에서 ×를 누르세요."}
+            {texts > 0 ? ` 텍스트 카드 ${texts}장도 함께 있습니다.` : ""}
+          </small>
+        </div>
+      )}
       {photos.length > 0 && (
         <div className="photo-strip">
           {photos.map((pg, i) => {
@@ -444,12 +506,21 @@ function PhotoPostFields({ s }: { s: Studio }) {
             );
             return (
               <div className="thumb" key={pg.id ?? i}>
-                <img src={card.photo} alt={`사진 ${i + 1}`} />
+                {card.photo ? (
+                  <img src={card.photo} alt={`사진 ${i + 1}`} />
+                ) : (
+                  <span
+                    className="thumb-empty"
+                    aria-label={`사진 ${i + 1} 비어 있음`}
+                  >
+                    {i + 1}
+                  </span>
+                )}
                 <button
                   type="button"
                   className="thumb-remove"
                   aria-label={`사진 ${i + 1} 빼기`}
-                  title="이 사진 빼기"
+                  title="이 사진 카드 빼기"
                   disabled={!!busy}
                   onClick={() => {
                     if (
@@ -469,14 +540,23 @@ function PhotoPostFields({ s }: { s: Studio }) {
           })}
         </div>
       )}
-      <small className="hint">
-        사진에 마우스를 올려 ×로 뺄 수 있습니다. 순서 바꾸기·사진별 글은 02
-        문안·사진 편집에서 합니다.
-        {texts > 0 ? ` 텍스트 카드 ${texts}장도 함께 있습니다.` : ""}
-      </small>
+      {photos.length > 0 && (
+        <small className="hint">
+          사진에 마우스를 올려 ×로 뺄 수 있습니다. 순서 바꾸기·사진별 글은 02
+          문안·사진 편집에서 합니다.
+        </small>
+      )}
     </div>
   );
 }
+
+/** The photo post's design choices; "AI추천 문구" is the frame design, text first. */
+const PHOTO_POST_DESIGNS: [string, PhotoStyle, string][] = [
+  ["image", "image", "이미지만"],
+  ["caption", "caption", "이미지 + 하단 글"],
+  ["frame", "frame", "제목·사진·요약 (액자형)"],
+  ["frame-ai", "frame", "제목·사진·요약 (AI추천 문구)"],
+];
 
 export const PHOTO_STYLES: [PhotoStyle, string][] = [
   ["image", "이미지만"],
