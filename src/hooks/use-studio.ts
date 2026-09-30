@@ -587,6 +587,9 @@ export function useStudio() {
     busyRef.current = true;
     setBusy(label);
     setError("");
+    // Suggestions belong to the failure that offered them; a new action that
+    // fails for the same reason offers fresh ones.
+    setHeadlineSuggestions([]);
     try {
       await fn();
       return true;
@@ -691,11 +694,35 @@ export function useStudio() {
         if (kind === "generate" && payload.scope === "all") {
           try {
             setBusy("1080 × 1350 이미지를 렌더하고 있습니다");
-            accept(
-              await api(`/projects/${result.id}/render`, "POST", {
-                revision: result.revision,
-              }),
-            );
+            const renderAll = (project: Project) =>
+              api(`/projects/${project.id}/render`, "POST", {
+                revision: project.revision,
+              });
+            let shortened = false;
+            let rendered;
+            try {
+              rendered = await renderAll(result);
+            } catch (e) {
+              // The AI wrote this title, so a too-long one is replaced with the
+              // first shorter title that fits the card and rendered once more.
+              const shorter = (e as any).suggestions?.[0];
+              if (!shorter || result.locks.headline) throw e;
+              const next = await api("/projects/" + result.id, "PUT", {
+                ...result,
+                headlineBreaks: "",
+                copy: {
+                  ...result.copy,
+                  headline: shorter,
+                  headlineMode: "escaped",
+                },
+              });
+              accept(next);
+              shortened = true;
+              rendered = await renderAll(next);
+            }
+            accept(rendered);
+            if (shortened)
+              setSaved("제목이 카드보다 길어 줄인 제목으로 바꿨습니다");
             setIndex(0);
           } catch (e) {
             throw Object.assign(
@@ -704,7 +731,8 @@ export function useStudio() {
                   (e as Error).message +
                   " 02 문안·사진 편집에서 수정 후 미리보기 갱신을 눌러 주세요.",
               ),
-              { code: (e as any).code },
+              // Keep the shorter-title suggestions so 02 can offer them.
+              { code: (e as any).code, suggestions: (e as any).suggestions },
             );
           }
         }
