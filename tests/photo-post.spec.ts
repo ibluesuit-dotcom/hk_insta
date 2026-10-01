@@ -98,7 +98,12 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
 
   // Five cards, no photos yet: numbered empty slots.
   await page.getByRole("radio", { name: "5장" }).click();
-  await expect(page.locator(".photo-strip .thumb-empty")).toHaveCount(5);
+  await expect(page.getByRole("radio", { name: "5장" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  // No empty thumbnails here: photos are attached per card in 02.
+  await expect(page.locator(".photo-strip")).toHaveCount(0);
   await page.locator(".editor").screenshot({
     path: `${process.env.E2E_ARTIFACT_DIR}/photo-post-source.png`,
   });
@@ -165,7 +170,16 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
   // Fewer cards drops them from the end, after asking.
   page.once("dialog", (d) => d.accept());
   await page.getByRole("radio", { name: "3장" }).click();
-  await expect(page.locator(".photo-strip .thumb")).toHaveCount(3);
+  await expect(page.getByRole("radio", { name: "3장" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get(`/api/projects/${p.id}`)).json()).count,
+    )
+    .toBe(3);
 
   // Other designs go back to uploading photos first.
   await page.getByRole("radio", { name: "이미지만" }).click();

@@ -500,7 +500,8 @@ function PhotoPostFields({ s }: { s: Studio }) {
           </small>
         </div>
       )}
-      {photos.length > 0 && (
+      {/* "AI추천 문구" sets the number above; its cards get photos in 02. */}
+      {!ai && photos.length > 0 && (
         <div className="photo-strip">
           {photos.map((pg, i) => {
             const card = pg.photoCard!;
@@ -543,7 +544,7 @@ function PhotoPostFields({ s }: { s: Studio }) {
           })}
         </div>
       )}
-      {photos.length > 0 && (
+      {!ai && photos.length > 0 && (
         <small className="hint">
           사진에 마우스를 올려 ×로 뺄 수 있습니다. 순서 바꾸기·사진별 글은 02
           문안·사진 편집에서 합니다.
