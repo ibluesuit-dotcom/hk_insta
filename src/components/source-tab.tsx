@@ -392,14 +392,18 @@ function PhotoPostFields({ s }: { s: Studio }) {
             key={key}
             role="radio"
             aria-checked={chosen === key}
-            className={
-              (chosen === key ? "selected" : "") +
-              (key === "frame-ai" ? " ai-pick" : "")
-            }
+            aria-label={label}
+            className={chosen === key ? "selected" : ""}
             disabled={!!busy}
             onClick={() => s.setPhotoStyle(style, key === "frame-ai")}
           >
-            {label}
+            {key === "frame-ai" ? (
+              <>
+                제목·사진·요약 <span className="ai-badge">AI추천 문구</span>
+              </>
+            ) : (
+              label
+            )}
           </button>
         ))}
       </div>
