@@ -1844,3 +1844,19 @@ header h1 {
   margin-top: 6px;
   text-align: center;
 }
+/* "AI추천 문구" stands out: red box, white text, a ring when chosen. */
+.segmented button.ai-pick {
+  background: #c8102e;
+  color: white;
+  font-weight: 800;
+}
+.segmented button.ai-pick:hover {
+  background: #a50d26;
+}
+.segmented button.ai-pick.selected {
+  background: #c8102e;
+  color: white;
+  box-shadow:
+    0 0 0 2px white,
+    0 0 0 4px #c8102e;
+}

@@ -392,7 +392,10 @@ function PhotoPostFields({ s }: { s: Studio }) {
             key={key}
             role="radio"
             aria-checked={chosen === key}
-            className={chosen === key ? "selected" : ""}
+            className={
+              (chosen === key ? "selected" : "") +
+              (key === "frame-ai" ? " ai-pick" : "")
+            }
             disabled={!!busy}
             onClick={() => s.setPhotoStyle(style, key === "frame-ai")}
           >
