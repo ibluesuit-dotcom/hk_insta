@@ -129,9 +129,15 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
     expect(pg.photoCard.summary.split("\n").length).toBeLessThanOrEqual(3);
   }
   await expect(page.locator(".notice")).toContainText("사진 카드 5장에 사진을");
-  expect(rendered).toBe(0);
+  // Only the cover can render yet (no card has a photo): it shows at once.
+  await expect(page.locator(".progress")).toHaveCount(0);
+  expect(rendered).toBe(1);
+  await page.locator(".dots button").first().click();
+  await expect(page.locator(".feed-image img")).toBeVisible();
+  await expect(page.locator(".stale.partial")).toBeVisible();
+  await page.getByRole("button", { name: "사진 1", exact: true }).click();
 
-  // 02 opened on the first card, which asks for its photo.
+  // 02 is open; the first card asks for its photo.
   await expect(
     page.getByRole("button", { name: "사진 1", exact: true }),
   ).toHaveClass(/selected/);
@@ -148,8 +154,12 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
   for (let n = 1; n <= 5; n++) {
     await page.getByRole("button", { name: `사진 ${n}`, exact: true }).click();
     await expect(page.locator(".progress")).toHaveCount(0);
+    const shown = page.waitForResponse((r) => r.url().endsWith("/render"));
     await page.getByLabel("사진 넣기").setInputFiles(photo);
     await expect(page.getByLabel("사진 교체")).toBeVisible();
+    // The card renders right after its photo goes in.
+    expect((await (await shown).json()).renders[n]).toBeTruthy();
+    await expect(page.locator(".progress")).toHaveCount(0);
   }
   // The text written before the photo is kept.
   const withPhotos = await (await request.get(`/api/projects/${p.id}`)).json();

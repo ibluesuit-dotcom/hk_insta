@@ -882,8 +882,24 @@ export function useStudio() {
             (pg: Project["copy"]["pages"][number]) =>
               isPhotoPage(pg) && !pg.photoCard?.photo,
           );
+          // The cover and cards that already have photos show right away.
+          setBusy("1080 × 1350 이미지를 렌더하고 있습니다");
+          try {
+            await renderOnly(result, [
+              0,
+              ...result.copy.pages.flatMap(
+                (pg: Project["copy"]["pages"][number], i: number) =>
+                  isPhotoPage(pg) && pg.photoCard?.photo ? [i + 1] : [],
+              ),
+            ]);
+          } catch (e) {
+            throw new Error(
+              "문안 생성·저장은 완료했습니다. 미리보기 렌더 실패: " +
+                (e as Error).message,
+            );
+          }
           setNotice(
-            `글을 만들었습니다. 02 문안·사진 편집에서 사진 카드 ${photosMissing(result)}장에 사진을 넣은 뒤 ‘미리보기 갱신’을 누르세요.`,
+            `글을 만들었습니다. 사진 카드 ${photosMissing(result)}장에 사진을 넣으면 그 카드가 미리보기에 바로 나옵니다.`,
           );
           setTab("edit");
           setIndex(first + 1);
@@ -1087,6 +1103,7 @@ export function useStudio() {
     uploads: File[],
     change: (p: Project, photos: string[]) => void,
     check: (p: Project) => void = () => {},
+    after?: (saved: Project) => Promise<void>,
   ) {
     return run(label, async () => {
       check(ref.current!);
@@ -1096,7 +1113,9 @@ export function useStudio() {
       check(current);
       const next = structuredClone(current);
       change(next, photos);
-      accept(await api("/projects/" + next.id, "PUT", next));
+      const saved: Project = await api("/projects/" + next.id, "PUT", next);
+      accept(saved);
+      if (after) await after(saved);
     });
   }
   const photoRoom = (p: Project, adding = 1) => {
@@ -1127,11 +1146,40 @@ export function useStudio() {
       p.copy.pages[i].kind = "text";
     });
   }
+  /** Partial renders, one card at a time, so the preview shows them. */
+  async function renderOnly(project: Project, indexes: number[]) {
+    let current = project;
+    for (const only of indexes) {
+      current = await api(`/projects/${current.id}/render`, "POST", {
+        revision: current.revision,
+        only,
+      });
+      accept(current);
+    }
+    return current;
+  }
+  /** Puts in or replaces a card's photo, then renders that card for preview. */
   function replaceCardPhoto(i: number, file: File) {
-    return saveCardChange("사진 교체 중", [file], (p, [photo]) => {
-      const page = p.copy.pages[i];
-      page.photoCard = newPhotoCard(photo, page.photoCard);
-    });
+    return saveCardChange(
+      "사진 넣는 중",
+      [file],
+      (p, [photo]) => {
+        const page = p.copy.pages[i];
+        page.photoCard = newPhotoCard(photo, page.photoCard);
+      },
+      undefined,
+      async (saved) => {
+        setBusy("이 카드를 렌더하고 있습니다");
+        try {
+          await renderOnly(saved, [i + 1]);
+        } catch (e) {
+          throw new Error(
+            "사진은 넣었습니다. 이 카드 미리보기 렌더 실패: " +
+              (e as Error).message,
+          );
+        }
+      },
+    );
   }
   function photoCardField(i: number, patch: Partial<PhotoCard>) {
     edit((p) => {

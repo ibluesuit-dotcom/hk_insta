@@ -1860,3 +1860,7 @@ header h1 {
     0 0 0 2px white,
     0 0 0 4px #c8102e;
 }
+.stale.partial {
+  background: #eef3f0;
+  color: #30704e;
+}

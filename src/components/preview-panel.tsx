@@ -46,12 +46,20 @@ export function PreviewPanel({ s }: { s: Studio }) {
           원본 카드
         </button>
       </div>
-      {(dirty ||
-        (index === 0 ? p.coverRenderRevision : p.renderRevision) !==
-          p.revision) &&
+      {/* Cards rendered one by one (photo post, text first) are not stale:
+          the rest are simply not ready yet. */}
+      {p.renders.length > 0 && !p.renders.every(Boolean) && !dirty ? (
+        <div className="stale partial">
+          일부 카드만 렌더됨 · 모든 카드가 준비되면 ‘미리보기 갱신’을 누르세요
+        </div>
+      ) : (
+        (dirty ||
+          (index === 0 ? p.coverRenderRevision : p.renderRevision) !==
+            p.revision) &&
         p.renders.length > 0 && (
           <div className="stale">변경 내용 미반영 · 다시 렌더해 주세요</div>
-        )}
+        )
+      )}
       {Object.keys(drafts).length > 0 && (
         <p className="draft-notice">
           미반영 초안 {Object.keys(drafts).length}개 · 미리보기 갱신으로 모든
