@@ -320,9 +320,22 @@ export async function render(p: Project, only?: number) {
                 const rank = semanticPlans.findIndex((plan) =>
                   plan.every((line) => width(line) <= 952),
                 );
-                candidate = rank < 0 ? [] : semanticPlans[rank];
-                // Editorial rank takes precedence over font size or balance.
-                semanticPenalty = rank;
+                if (rank >= 0) {
+                  candidate = semanticPlans[rank];
+                  // Editorial rank takes precedence over font size or balance.
+                  semanticPenalty = rank;
+                } else {
+                  // No AI split fits this size: break automatically instead
+                  // of failing the whole render, ranked below every AI plan.
+                  candidate = (window as any).candidateLines(
+                    headline,
+                    width,
+                    952,
+                    (penalty: number) => {
+                      semanticPenalty = semanticPlans.length + penalty;
+                    },
+                  );
+                }
               } else {
                 candidate = (window as any).candidateLines(
                   headline,
