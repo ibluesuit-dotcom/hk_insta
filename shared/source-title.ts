@@ -2,31 +2,26 @@ import type { Copy } from "./model";
 
 const protectedTags = new Set(["속보", "단독"]);
 // Kept tags are masked while the loop removes the rest, then restored.
-const PROTECT: Record<string, string> = {
-  "[": "\uE000",
-  "]": "\uE001",
-  "(": "\uE002",
-  ")": "\uE003",
-};
+const PROTECT: Record<string, string> = { "[": "\uE000", "]": "\uE001" };
 const UNPROTECT = Object.fromEntries(
   Object.entries(PROTECT).map(([k, v]) => [v, k]),
 );
 
 export function normalizeSourceTitle(sourceTitle: string): string {
   let title = sourceTitle.replace(/\s+/g, " ").trim();
-  // Every [ ] and ( ) is dropped with its contents, wherever it stands, except
-  // the protected tags [단독] (단독) [속보] (속보). Innermost first, so nested
-  // brackets go too.
+  // Every [ ] is dropped with its contents, wherever it stands, except the
+  // protected tags [단독] and [속보]. Innermost first, so nested ones go too.
+  // Round brackets ( ) are headline content and stay.
   let before;
   do {
     before = title;
-    title = title.replace(/\[[^\[\]()]*\]|\([^\[\]()]*\)/g, (tag) =>
+    title = title.replace(/\[[^\[\]]*\]/g, (tag) =>
       protectedTags.has(tag.slice(1, -1).trim())
-        ? tag.replace(/[[\]()]/g, (c) => PROTECT[c])
+        ? tag.replace(/[[\]]/g, (c) => PROTECT[c])
         : "",
     );
   } while (title !== before);
-  title = title.replace(/[\uE000-\uE003]/g, (c) => UNPROTECT[c]);
+  title = title.replace(/[\uE000\uE001]/g, (c) => UNPROTECT[c]);
   title = title.replace(/\s+/g, " ").trim();
   // Only paired quotes. A single quote inside a word is an apostrophe, not a pair.
   title = title.replace(/"([^"\n]+)"/g, "“$1”");
