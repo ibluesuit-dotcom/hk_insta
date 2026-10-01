@@ -169,7 +169,8 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
     await page.getByLabel("사진 넣기").setInputFiles(photo);
     await expect(page.getByLabel("사진 교체")).toBeVisible();
     // The card renders right after its photo goes in.
-    expect((await (await shown).json()).renders[n]).toBeTruthy();
+    // That card re-renders and every other card keeps its preview.
+    expect((await (await shown).json()).renders.every(Boolean)).toBe(true);
     await expect(page.locator(".progress")).toHaveCount(0);
   }
   // The text written before the photo is kept.

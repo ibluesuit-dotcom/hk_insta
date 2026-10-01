@@ -134,20 +134,28 @@ test("mixed text/photo cards: AI writes text cards only, render and ZIP follow k
   await put((p) => {
     [p.copy.pages[0], p.copy.pages[2]] = [p.copy.pages[2], p.copy.pages[0]];
   });
-  expect(p.renders).toEqual([images[0]]);
+  // The swapped cards lose their images; the card that stayed keeps its own.
+  expect(p.renders).toEqual([images[0], "", images[2], ""]);
   const again = await request.post(`/api/projects/${p.id}/render`, {
     data: { revision: p.revision },
   });
   expect(again.ok(), await again.text()).toBe(true);
   p = await again.json();
 
-  // Changing a card's kind or photo drops the old images, except the cover.
-  const before = p.renders[0];
+  // Changing a card's kind or photo drops that card's image only.
+  const before = p.renders;
   await put((p) => {
     p.copy.pages[2].kind = "photo";
     p.copy.pages[2].photoCard = { ...p.copy.pages[1].photoCard };
   });
-  expect(p.renders).toEqual([before]);
+  expect(p.renders).toEqual([before[0], before[1], before[2], ""]);
+  // A new photo on card 1 keeps the other cards' images (it was clearing them).
+  const kept = p.renders;
+  const another = await upload();
+  await put((p) => {
+    p.copy.pages[1].photoCard.photo = another;
+  });
+  expect(p.renders).toEqual([kept[0], kept[1], "", kept[3]]);
   await put((p) => {
     p.copy.pages[2].kind = "text";
   });

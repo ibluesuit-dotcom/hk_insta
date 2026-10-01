@@ -11,14 +11,30 @@ import { wrap, validateProject } from "../http";
 import { aiAssetIdOf, backgroundFromSidecar } from "../../shared/ai-background";
 import { assetUsableBy, foreignAsset, loadSidecar } from "../ai-background";
 
-const cardLayout = (p: Project) =>
-  JSON.stringify(
-    p.copy.pages.map((pg) => [
-      pg.id ?? "",
-      isPhotoPage(pg) ? "photo" : "text",
-      isPhotoPage(pg) ? pg.photoCard?.photo : "",
-    ]),
-  );
+const cardKey = (pg: Project["copy"]["pages"][number]) =>
+  JSON.stringify([
+    pg.id ?? "",
+    isPhotoPage(pg) ? "photo" : "text",
+    isPhotoPage(pg) ? pg.photoCard?.photo : "",
+  ]);
+/**
+ * Images kept after a save: the cover's, and each card's while the same card
+ * (ID, kind, photo) stays at the same place. A card that was added, moved,
+ * changed kind or got another photo loses only its own image, so an old
+ * image never previews under another card and the others stay visible.
+ */
+function keptRenders(old: Project, input: Project) {
+  if (!old.renders.length) return old.renders;
+  return [
+    old.renders[0] ?? "",
+    ...input.copy.pages.map((pg, i) => {
+      const before = old.copy.pages[i];
+      return pg.id && before && cardKey(before) === cardKey(pg)
+        ? (old.renders[i + 1] ?? "")
+        : "";
+    }),
+  ];
+}
 // Project CRUD and version history.
 export const projectsRouter = express.Router();
 projectsRouter.get(
@@ -75,13 +91,7 @@ projectsRouter.put(
           background,
           id: old.id,
           versions: old.versions,
-          // Old images must not show under another card: when cards are
-          // added, removed, moved or change kind or photo, only the cover
-          // image stays.
-          renders:
-            cardLayout(old) === cardLayout(input)
-              ? old.renders
-              : old.renders.slice(0, 1),
+          renders: keptRenders(old, input),
           coverLayout: old.coverLayout,
           coverRenderRevision:
             displayOnly && old.coverRenderRevision === old.revision
