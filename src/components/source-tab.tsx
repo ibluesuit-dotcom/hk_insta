@@ -560,16 +560,16 @@ function PhotoPostFields({ s }: { s: Studio }) {
 
 /** The photo post's design choices; "AI추천 문구" is the frame design, text first. */
 const PHOTO_POST_DESIGNS: [string, PhotoStyle, string][] = [
-  ["image", "image", "이미지만"],
-  ["caption", "caption", "이미지 + 하단 글"],
-  ["frame", "frame", "제목·사진·요약 (액자형)"],
   ["frame-ai", "frame", "제목·사진·요약 (AI추천 문구)"],
+  ["frame", "frame", "제목·사진·요약 (액자형)"],
+  ["caption", "caption", "이미지 + 하단 글"],
+  ["image", "image", "이미지만"],
 ];
 
 export const PHOTO_STYLES: [PhotoStyle, string][] = [
-  ["image", "이미지만"],
-  ["caption", "이미지 + 하단 글"],
   ["frame", "제목·사진·요약 (액자형)"],
+  ["caption", "이미지 + 하단 글"],
+  ["image", "이미지만"],
 ];
 const PHOTO_STYLE_HELP: Record<PhotoStyle, string> = {
   image: "사진만 카드를 가득 채웁니다.",
