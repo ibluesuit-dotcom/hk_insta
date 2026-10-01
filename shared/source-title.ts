@@ -22,6 +22,8 @@ export function normalizeSourceTitle(sourceTitle: string): string {
     );
   } while (title !== before);
   title = title.replace(/[\uE000\uE001]/g, (c) => UNPROTECT[c]);
+  // Round brackets stay, except the wire label "(종합)".
+  title = title.replace(/\(\s*종합\s*\)/g, "");
   title = title.replace(/\s+/g, " ").trim();
   // Only paired quotes. A single quote inside a word is an apostrophe, not a pair.
   title = title.replace(/"([^"\n]+)"/g, "“$1”");

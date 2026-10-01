@@ -36,8 +36,9 @@ test("every [ ] goes with its contents except [단독] [속보]; ( ) stays", () 
   assert.equal(normalize("[사진]코스피 [중첩 [x]] 반등"), "코스피 반등");
   assert.equal(
     normalize("(종합) 삼성전자(005930) 3분기 [단독] 실적 (2보)"),
-    "(종합) 삼성전자(005930) 3분기 [단독] 실적 (2보)",
+    "삼성전자(005930) 3분기 [단독] 실적 (2보)",
   );
+  assert.equal(normalize("코스피 반등( 종합 )"), "코스피 반등");
   assert.equal(
     normalize('[사진] "금리 인상은 (사실상) 문제 아냐"…코스피'),
     "“금리 인상은 (사실상) 문제 아냐” 코스피",
