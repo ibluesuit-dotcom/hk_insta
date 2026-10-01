@@ -871,40 +871,6 @@ export function useStudio() {
             "처리 중 편집된 내용이 있어 결과를 적용하지 않았습니다. 저장 후 다시 시도하세요.",
           );
         }
-        // Photo post, text first: cards still waiting for photos are not
-        // rendered; the editor attaches them in 02.
-        if (
-          kind === "generate" &&
-          payload.scope === "all" &&
-          photosMissing(result)
-        ) {
-          const first = result.copy.pages.findIndex(
-            (pg: Project["copy"]["pages"][number]) =>
-              isPhotoPage(pg) && !pg.photoCard?.photo,
-          );
-          // The cover and cards that already have photos show right away.
-          setBusy("1080 × 1350 이미지를 렌더하고 있습니다");
-          try {
-            await renderOnly(result, [
-              0,
-              ...result.copy.pages.flatMap(
-                (pg: Project["copy"]["pages"][number], i: number) =>
-                  isPhotoPage(pg) && pg.photoCard?.photo ? [i + 1] : [],
-              ),
-            ]);
-          } catch (e) {
-            throw new Error(
-              "문안 생성·저장은 완료했습니다. 미리보기 렌더 실패: " +
-                (e as Error).message,
-            );
-          }
-          setNotice(
-            `글을 만들었습니다. 사진 카드 ${photosMissing(result)}장에 사진을 넣으면 그 카드가 미리보기에 바로 나옵니다.`,
-          );
-          setTab("edit");
-          setIndex(first + 1);
-          return;
-        }
         if (kind === "generate" && payload.scope === "all") {
           try {
             setBusy("1080 × 1350 이미지를 렌더하고 있습니다");
@@ -938,6 +904,20 @@ export function useStudio() {
             if (shortened)
               setSaved("제목이 카드보다 길어 줄인 제목으로 바꿨습니다");
             setIndex(0);
+            // Photo post, text first: every card is in the preview with its
+            // title and text; cards waiting for a photo show an empty area.
+            if (photosMissing(rendered)) {
+              setNotice(
+                `글을 만들었습니다. 미리보기에서 카드 글을 보고, 02 문안·사진 편집에서 사진 카드 ${photosMissing(rendered)}장에 사진을 넣으세요.`,
+              );
+              setTab("edit");
+              setIndex(
+                rendered.copy.pages.findIndex(
+                  (pg: Project["copy"]["pages"][number]) =>
+                    isPhotoPage(pg) && !pg.photoCard?.photo,
+                ) + 1,
+              );
+            }
           } catch (e) {
             throw Object.assign(
               new Error(

@@ -741,10 +741,12 @@ export function carryRenderFreshness(p: Project) {
         : p.coverRenderRevision,
   };
 }
+/** Every card rendered at this revision, and no card waiting for a photo. */
 export function renderFresh(p: Project) {
   return (
     p.renderRevision === p.revision &&
     p.renders.length === p.count + 1 &&
-    p.renders.every(Boolean)
+    p.renders.every(Boolean) &&
+    !photosMissing(p)
   );
 }

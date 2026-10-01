@@ -10,6 +10,7 @@ import { isAiBackground } from "../../shared/ai-background";
 import {
   cardAlt,
   cardKind,
+  photosMissing,
   profileOnlyChange,
   type Project,
 } from "../../shared/model";
@@ -142,6 +143,10 @@ outputRouter.get(
       !p.renders.every(Boolean)
     )
       throw new Error("현재 버전의 전체 미리보기를 갱신한 뒤 다운로드하세요.");
+    if (photosMissing(p))
+      throw new Error(
+        `사진 카드 ${photosMissing(p)}장에 아직 사진이 없습니다. 사진을 넣고 미리보기를 갱신한 뒤 내보내세요.`,
+      );
     res.attachment("news-card-" + p.id.slice(0, 8) + ".zip");
     const zip = archiver("zip", { zlib: { level: 6 } });
     zip.on("error", () => res.destroy());
@@ -198,6 +203,8 @@ outputRouter.get(
       !p.renders.every(Boolean)
     )
       throw new Error("현재 버전의 전체 미리보기 갱신이 필요합니다.");
+    if (photosMissing(p))
+      throw new Error("사진이 없는 카드가 있어 내려받을 수 없습니다.");
     const i = Number(req.params.index);
     if (!Number.isInteger(i) || !p.renders[i])
       throw new Error("이미지가 없습니다.");

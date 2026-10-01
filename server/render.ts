@@ -65,7 +65,7 @@ function frameCardHtml(card: PhotoCard, image: string) {
   const title = (card.title ?? "").trim();
   // Lines exactly as typed, blank ones included (they keep their height).
   const summary = frameLines(card.summary).map((l) => l.trim());
-  return `<div class="fr">${title ? `<div class="fr-title">${marked(title, [[card.titleHighlight, "fr-red"]])}</div>` : ""}<div class="fr-frame"><div class="fr-inner"><img class="fr-photo" src="${image}" style="object-position:${x}% ${y}%;transform:scale(${zoom});transform-origin:${x}% ${y}%">${card.credit.trim() ? `<span class="fr-credit">${escape(card.credit.trim())}</span>` : ""}</div></div>${
+  return `<div class="fr">${title ? `<div class="fr-title">${marked(title, [[card.titleHighlight, "fr-red"]])}</div>` : ""}<div class="fr-frame"><div class="fr-inner">${image ? `<img class="fr-photo" src="${image}" style="object-position:${x}% ${y}%;transform:scale(${zoom});transform-origin:${x}% ${y}%">` : `<div class="fr-empty">사진을 넣어 주세요</div>`}${card.credit.trim() ? `<span class="fr-credit">${escape(card.credit.trim())}</span>` : ""}</div></div>${
     summary.length
       ? `<p class="fr-summary">${summary
           .map(
@@ -85,6 +85,8 @@ function frameCardHtml(card: PhotoCard, image: string) {
 // caption strip at the bottom and the credit. No cover or brief decoration.
 function photoCardHtml(card: PhotoCard, image: string) {
   if (card.layout === "frame") return frameCardHtml(card, image);
+  if (!image)
+    return `<div class="pc-empty">사진을 넣어 주세요</div>${card.textVisible && card.text.trim() ? `<div class="pc-scrim"></div><p class="pc-text">${escape(card.text.trim())}</p>` : ""}`;
   const cover = card.fit === "cover";
   const { x, y, zoom } = card.focal;
   const text = card.textVisible && card.text.trim() ? card.text.trim() : "";
@@ -96,7 +98,7 @@ export function html(p: Project, index: number, font: string, image: string) {
   const textIndexes = c.pages.flatMap((page, i) =>
     isPhotoPage(page) ? [] : [i],
   );
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>@font-face{font-family:Pretendard;src:url(data:font/woff2;base64,${font});font-weight:45 920;font-display:block}*{box-sizing:border-box}body{margin:0;font-family:Pretendard;color:white}.card{width:1080px;height:1350px;overflow:hidden;position:relative;background:#0B1B2B}.photo{position:absolute;width:100%;height:100%;object-fit:cover;object-position:${p.focal.x}% ${p.focal.y}%;transform:scale(${p.focal.zoom});transform-origin:${p.focal.x}% ${p.focal.y}%}.scrim{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(11,27,43,0) 34%,rgba(11,27,43,.88) 72%,rgba(11,27,43,.97) 100%)}.content{position:absolute;left:64px;right:64px;bottom:64px;display:flex;flex-direction:column;gap:32px}.group{display:flex;flex-direction:column;gap:18px}.kicker{display:inline-block;background:#C8102E;padding:10px 20px;font-size:42px;font-weight:800;letter-spacing:.02em;white-space:nowrap}h1{margin:0;font-size:88px;font-weight:800;line-height:1.14;letter-spacing:-.025em;white-space:pre;word-break:keep-all}.gold{color:#FFC72C}.line{height:2px;background:rgba(255,255,255,.3)}.meta{display:flex;justify-content:space-between;gap:24px;color:rgba(255,255,255,.72);font-size:24px;font-weight:600}.domain{letter-spacing:.06em;white-space:nowrap}.bodycard{padding:80px 64px}.eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#FFC72C}.bodytitle{font-size:48px;line-height:1.25;margin:64px 0 42px;word-break:keep-all;overflow-wrap:normal}.bodytext{font-size:${p.bodyFont}px;line-height:1.45;font-weight:650;white-space:pre-wrap;word-break:keep-all;overflow-wrap:normal;margin:0;max-height:840px}.bodyfooter{position:absolute;bottom:64px;left:64px;right:64px}.pc-photo{position:absolute;inset:0;width:100%;height:100%}.pc-scrim{position:absolute;left:0;right:0;bottom:0;height:520px;background:linear-gradient(to bottom,rgba(11,27,43,0),rgba(11,27,43,.9) 55%)}.pc-text{position:absolute;left:64px;right:64px;bottom:120px;margin:0;font-size:46px;line-height:1.4;font-weight:750;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;max-height:193px;overflow:hidden}.pc-credit{position:absolute;right:64px;bottom:56px;font-size:22px;font-weight:600;color:rgba(255,255,255,.72)}.pc-credit.alone{background:rgba(11,27,43,.6);padding:6px 12px}.fr{position:absolute;inset:0;background:#F4F2EE;padding:104px 72px 96px;display:flex;flex-direction:column;align-items:center;gap:56px;color:#171719}.fr-title{font-size:101px;line-height:1.1;font-weight:700;letter-spacing:-0.0319em;text-align:center;white-space:nowrap;max-width:936px}.fr-red{color:#FF4242}.fr-frame{flex:1;width:100%;min-height:0;background:#FFFFFF;padding:20px;box-shadow:0 6px 24px rgba(23,23,23,0.10);display:flex}.fr-inner{position:relative;flex:1;overflow:hidden}.fr-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.fr-credit{position:absolute;bottom:20px;right:24px;background:rgba(255,255,255,0.88);border-radius:999px;padding:6px 16px;font-size:20px;font-weight:500;color:#171719}.fr-summary{margin:0;font-size:66px;line-height:1.44;font-weight:600;letter-spacing:-0.012em;text-align:center;white-space:pre}.fr-under{text-decoration:underline;text-decoration-color:#171719;text-underline-offset:10px;text-decoration-thickness:4px}</style></head><body><article class="card ${index && !isPhotoPage(pg) ? "bodycard" : ""}">${index && isPhotoPage(pg) ? photoCardHtml(pg.photoCard!, image) : index ? `<div class="eyebrow">NEWS BRIEF / ${String(index).padStart(2, "0")}</div><h2 class="bodytitle">${escape(pg.title)}</h2><p class="bodytext">${mark(pg.body, pg.highlight)}</p><div class="bodyfooter group"><div class="line"></div><div class="meta"><span>THE BRIEF</span><span>본문 ${textIndexes.indexOf(index - 1) + 1}/${textIndexes.length}</span></div></div>` : `<img class="photo" src="${image}"><div class="scrim"></div><div class="content"><div class="group">${c.kicker && !p.kickerHidden ? `<div><span class="kicker">${escape(c.kicker)}</span></div>` : ""}<h1 id="headline"></h1></div><div class="group"><div class="line"></div><div class="meta"><span id="credit">${escape(aiLabel(p) ?? p.credit)}</span><span class="domain">THE BRIEF</span></div></div></div>`}</article></body></html>`;
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>@font-face{font-family:Pretendard;src:url(data:font/woff2;base64,${font});font-weight:45 920;font-display:block}*{box-sizing:border-box}body{margin:0;font-family:Pretendard;color:white}.card{width:1080px;height:1350px;overflow:hidden;position:relative;background:#0B1B2B}.photo{position:absolute;width:100%;height:100%;object-fit:cover;object-position:${p.focal.x}% ${p.focal.y}%;transform:scale(${p.focal.zoom});transform-origin:${p.focal.x}% ${p.focal.y}%}.scrim{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(11,27,43,0) 34%,rgba(11,27,43,.88) 72%,rgba(11,27,43,.97) 100%)}.content{position:absolute;left:64px;right:64px;bottom:64px;display:flex;flex-direction:column;gap:32px}.group{display:flex;flex-direction:column;gap:18px}.kicker{display:inline-block;background:#C8102E;padding:10px 20px;font-size:42px;font-weight:800;letter-spacing:.02em;white-space:nowrap}h1{margin:0;font-size:88px;font-weight:800;line-height:1.14;letter-spacing:-.025em;white-space:pre;word-break:keep-all}.gold{color:#FFC72C}.line{height:2px;background:rgba(255,255,255,.3)}.meta{display:flex;justify-content:space-between;gap:24px;color:rgba(255,255,255,.72);font-size:24px;font-weight:600}.domain{letter-spacing:.06em;white-space:nowrap}.bodycard{padding:80px 64px}.eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#FFC72C}.bodytitle{font-size:48px;line-height:1.25;margin:64px 0 42px;word-break:keep-all;overflow-wrap:normal}.bodytext{font-size:${p.bodyFont}px;line-height:1.45;font-weight:650;white-space:pre-wrap;word-break:keep-all;overflow-wrap:normal;margin:0;max-height:840px}.bodyfooter{position:absolute;bottom:64px;left:64px;right:64px}.pc-photo{position:absolute;inset:0;width:100%;height:100%}.pc-scrim{position:absolute;left:0;right:0;bottom:0;height:520px;background:linear-gradient(to bottom,rgba(11,27,43,0),rgba(11,27,43,.9) 55%)}.pc-text{position:absolute;left:64px;right:64px;bottom:120px;margin:0;font-size:46px;line-height:1.4;font-weight:750;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;max-height:193px;overflow:hidden}.pc-credit{position:absolute;right:64px;bottom:56px;font-size:22px;font-weight:600;color:rgba(255,255,255,.72)}.pc-credit.alone{background:rgba(11,27,43,.6);padding:6px 12px}.fr{position:absolute;inset:0;background:#F4F2EE;padding:104px 72px 96px;display:flex;flex-direction:column;align-items:center;gap:56px;color:#171719}.fr-title{font-size:101px;line-height:1.1;font-weight:700;letter-spacing:-0.0319em;text-align:center;white-space:nowrap;max-width:936px}.fr-red{color:#FF4242}.fr-frame{flex:1;width:100%;min-height:0;background:#FFFFFF;padding:20px;box-shadow:0 6px 24px rgba(23,23,23,0.10);display:flex}.fr-inner{position:relative;flex:1;overflow:hidden}.fr-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.fr-credit{position:absolute;bottom:20px;right:24px;background:rgba(255,255,255,0.88);border-radius:999px;padding:6px 16px;font-size:20px;font-weight:500;color:#171719}.fr-summary{margin:0;font-size:66px;line-height:1.44;font-weight:600;letter-spacing:-0.012em;text-align:center;white-space:pre}.fr-empty,.pc-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:600;color:#9AA3A0;background:#E9ECEA}.pc-empty{background:#1E2F3F;color:#8DA0B0}.fr-under{text-decoration:underline;text-decoration-color:#171719;text-underline-offset:10px;text-decoration-thickness:4px}</style></head><body><article class="card ${index && !isPhotoPage(pg) ? "bodycard" : ""}">${index && isPhotoPage(pg) ? photoCardHtml(pg.photoCard!, image) : index ? `<div class="eyebrow">NEWS BRIEF / ${String(index).padStart(2, "0")}</div><h2 class="bodytitle">${escape(pg.title)}</h2><p class="bodytext">${mark(pg.body, pg.highlight)}</p><div class="bodyfooter group"><div class="line"></div><div class="meta"><span>THE BRIEF</span><span>본문 ${textIndexes.indexOf(index - 1) + 1}/${textIndexes.length}</span></div></div>` : `<img class="photo" src="${image}"><div class="scrim"></div><div class="content"><div class="group">${c.kicker && !p.kickerHidden ? `<div><span class="kicker">${escape(c.kicker)}</span></div>` : ""}<h1 id="headline"></h1></div><div class="group"><div class="line"></div><div class="meta"><span id="credit">${escape(aiLabel(p) ?? p.credit)}</span><span class="domain">THE BRIEF</span></div></div></div>`}</article></body></html>`;
 }
 // Only the canonical AI spelling is shown; an alias would hide its label.
 async function readPhoto(photo: string, card?: number) {
@@ -143,11 +145,7 @@ export async function render(p: Project, only?: number) {
   )
     throw new Error("모든 본문 페이지의 제목과 본문을 입력해 주세요.");
   for (const [i, pg] of p.copy.pages.entries())
-    if (selected(i) && isPhotoPage(pg)) {
-      if (!pg.photoCard?.photo)
-        throw Object.assign(new Error(`카드 ${i + 2}에 사진을 넣어 주세요.`), {
-          code: "IMAGE",
-        });
+    if (selected(i) && isPhotoPage(pg) && pg.photoCard) {
       if (
         pg.photoCard.layout === "frame" &&
         frameLines(pg.photoCard.summary).length > 3
@@ -179,7 +177,12 @@ export async function render(p: Project, only?: number) {
   const cardImages = new Map<number, string>();
   for (const [i, pg] of p.copy.pages.entries())
     if (selected(i) && only !== 0 && isPhotoPage(pg))
-      cardImages.set(i + 1, await readPhoto(pg.photoCard!.photo, i + 2));
+      // A card still waiting for its photo renders with an empty photo
+      // area, so its title and text can be seen before choosing a photo.
+      cardImages.set(
+        i + 1,
+        pg.photoCard!.photo ? await readPhoto(pg.photoCard!.photo, i + 2) : "",
+      );
   const semanticPlans =
     !headline.manual && (only === undefined || only === 0)
       ? await headlinePlans(headline.text)
@@ -229,8 +232,8 @@ export async function render(p: Project, only?: number) {
         );
       if (cardImages.has(i)) {
         const problem = await page.evaluate(() => {
-          const img = document.querySelector("img")!;
-          if (!img.complete || !img.naturalWidth) return "decode";
+          const img = document.querySelector("img");
+          if (img && (!img.complete || !img.naturalWidth)) return "decode";
           // Frame card: the title stays on one line (101px, else 86px: the handoff sizes less 10%) and
           // each summary line keeps the editor's break within 936px.
           const title = document.querySelector<HTMLElement>(".fr-title");

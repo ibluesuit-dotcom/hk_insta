@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { Icon } from "../icons";
 import { PreviewImage } from "../preview-image";
 import { Studio } from "../hooks/use-studio";
-import { cardAlt, cardKind } from "../../shared/model";
+import { cardAlt, cardKind, photosMissing } from "../../shared/model";
 import { exportCaption } from "../../shared/post-text";
 
 /** Right-hand live output: phone mockup / original card, render and export. */
@@ -48,7 +48,12 @@ export function PreviewPanel({ s }: { s: Studio }) {
       </div>
       {/* Cards rendered one by one (photo post, text first) are not stale:
           the rest are simply not ready yet. */}
-      {p.renders.length > 0 && !p.renders.every(Boolean) && !dirty ? (
+      {photosMissing(p) > 0 && p.renders.length > 0 && !dirty ? (
+        <div className="stale partial">
+          사진이 없는 카드 {photosMissing(p)}장 · 사진을 넣으면 내보낼 수
+          있습니다
+        </div>
+      ) : p.renders.length > 0 && !p.renders.every(Boolean) && !dirty ? (
         <div className="stale partial">
           일부 카드만 렌더됨 · 모든 카드가 준비되면 ‘미리보기 갱신’을 누르세요
         </div>

@@ -129,12 +129,28 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
     expect(pg.photoCard.summary.split("\n").length).toBeLessThanOrEqual(3);
   }
   await expect(page.locator(".notice")).toContainText("사진 카드 5장에 사진을");
-  // Only the cover can render yet (no card has a photo): it shows at once.
+  // Every card renders at once; cards without a photo show an empty area,
+  // so the titles and text can be read before choosing photos.
   await expect(page.locator(".progress")).toHaveCount(0);
   expect(rendered).toBe(1);
-  await page.locator(".dots button").first().click();
+  const afterGenerate = await (
+    await request.get(`/api/projects/${p.id}`)
+  ).json();
+  expect(afterGenerate.renders).toHaveLength(6);
+  expect(afterGenerate.renders.every(Boolean)).toBe(true);
+  await page.locator(".dots button").nth(1).click();
   await expect(page.locator(".feed-image img")).toBeVisible();
-  await expect(page.locator(".stale.partial")).toBeVisible();
+  await expect(page.locator(".stale.partial")).toContainText(
+    "사진이 없는 카드 5장",
+  );
+  // Not exportable while a card waits for its photo.
+  await expect(
+    page.getByRole("link", { name: "내보내기", exact: true }),
+  ).toHaveAttribute("aria-disabled", "true");
+  expect(
+    (await (await request.get(`/api/projects/${p.id}/download`)).json())
+      .message,
+  ).toContain("아직 사진이 없습니다");
   await page.getByRole("button", { name: "사진 1", exact: true }).click();
 
   // 02 is open; the first card asks for its photo.
@@ -146,11 +162,6 @@ test("AI추천 문구: card count first, titles and summaries generated first, p
     p.copy.pages[0].photoCard.summary,
   );
   const render = () => page.getByRole("button", { name: /미리보기 갱신/ });
-  const refused = page.waitForResponse((r) => r.url().endsWith("/render"));
-  await render().click();
-  expect((await (await refused).json()).message).toContain(
-    "사진을 넣어 주세요",
-  );
   for (let n = 1; n <= 5; n++) {
     await page.getByRole("button", { name: `사진 ${n}`, exact: true }).click();
     await expect(page.locator(".progress")).toHaveCount(0);
