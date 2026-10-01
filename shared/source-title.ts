@@ -1,17 +1,33 @@
 import type { Copy } from "./model";
 
 const protectedTags = new Set(["속보", "단독"]);
+// Kept tags are masked while the loop removes the rest, then restored.
+const PROTECT: Record<string, string> = {
+  "[": "\uE000",
+  "]": "\uE001",
+  "(": "\uE002",
+  ")": "\uE003",
+};
+const UNPROTECT = Object.fromEntries(
+  Object.entries(PROTECT).map(([k, v]) => [v, k]),
+);
 
 export function normalizeSourceTitle(sourceTitle: string): string {
   let title = sourceTitle.replace(/\s+/g, " ").trim();
-  // Every bracket in the contiguous runs at both edges is a corner label, so
-  // only the protected tags survive. Brackets elsewhere are headline content.
-  const cleanRun = (run: string) =>
-    run.replace(/\[[^\[\]]+\]/g, (tag) =>
-      protectedTags.has(tag.slice(1, -1).trim()) ? tag : "",
+  // Every [ ] and ( ) is dropped with its contents, wherever it stands, except
+  // the protected tags [단독] (단독) [속보] (속보). Innermost first, so nested
+  // brackets go too.
+  let before;
+  do {
+    before = title;
+    title = title.replace(/\[[^\[\]()]*\]|\([^\[\]()]*\)/g, (tag) =>
+      protectedTags.has(tag.slice(1, -1).trim())
+        ? tag.replace(/[[\]()]/g, (c) => PROTECT[c])
+        : "",
     );
-  title = title.replace(/^(?:\[[^\[\]]+\]\s*)+/, cleanRun);
-  title = title.replace(/(?:\s*\[[^\[\]]+\])+$/, cleanRun);
+  } while (title !== before);
+  title = title.replace(/[\uE000-\uE003]/g, (c) => UNPROTECT[c]);
+  title = title.replace(/\s+/g, " ").trim();
   // Only paired quotes. A single quote inside a word is an apostrophe, not a pair.
   title = title.replace(/"([^"\n]+)"/g, "“$1”");
   title = title.replace(
@@ -36,5 +52,10 @@ export function sourceHeadline(
     throw new Error(
       "원문 제목이 표지 제목 한도(200자)를 초과합니다. 원문 제목을 확인해 주세요. 자동 축약하지 않습니다.",
     );
-  return { headline, headlineMode: "literal", highlight: "", headlineEvidence: [sourceTitle] };
+  return {
+    headline,
+    headlineMode: "literal",
+    highlight: "",
+    headlineEvidence: [sourceTitle],
+  };
 }

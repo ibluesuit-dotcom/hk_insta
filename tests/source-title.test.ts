@@ -14,7 +14,7 @@ const example =
 const expected =
   "“금리 인상은 문제도 아니다” 코스피, 외국인·기관 매수에 6800선 안착";
 
-test("edge runs drop every bracket except the protected tags", () => {
+test("every [ ] and ( ) goes with its contents except [단독] (단독) [속보] (속보)", () => {
   assert.equal(normalize(example), expected);
   assert.equal(
     normalize("[특징주][속보][fn오전시황] 6800선 [마감시황][단독][특징주]"),
@@ -31,8 +31,24 @@ test("edge runs drop every bracket except the protected tags", () => {
   assert.equal(normalize("[2026년 9월] 수출 12.5% 증가"), "수출 12.5% 증가");
   assert.equal(normalize("[새 코너] 제목 [임의 분류]"), "제목");
   assert.equal(normalize("[특징주][팩트][특징주] 내용"), "내용");
-  // Brackets inside the headline are content, not corner labels.
-  assert.equal(normalize("수출 [특징주] 6800선"), "수출 [특징주] 6800선");
+  // Inside the headline too, and round brackets, nested ones included.
+  assert.equal(normalize("수출 [특징주] 6800선"), "수출 6800선");
+  assert.equal(
+    normalize("(종합) 삼성전자(005930) 3분기 (단독) 실적 (2보)"),
+    "삼성전자 3분기 (단독) 실적",
+  );
+  assert.equal(
+    normalize("LG에너지솔루션(373220)이 상승"),
+    "LG에너지솔루션이 상승",
+  );
+  assert.equal(
+    normalize("(속보)[단독] 제목 ((중첩)) 끝"),
+    "(속보)[단독] 제목 끝",
+  );
+  assert.equal(
+    normalize('[사진] "금리 인상은 (사실상) 문제 아냐"…코스피'),
+    "“금리 인상은 문제 아냐” 코스피",
+  );
 });
 test("typography preserves omissions, apostrophes, digits, words and terminal ellipses", () => {
   assert.equal(
