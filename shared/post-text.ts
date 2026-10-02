@@ -14,7 +14,7 @@ export const POST_FORMAT_NAMES: Record<PostFormat, string> = {
   bullets: "불릿 요약",
 };
 export const POST_FORMAT_HELP: Record<PostFormat, string> = {
-  short: "핵심 사건과 꼭 필요한 맥락을 1~3문장으로 짧게 전합니다.",
+  short: "핵심 사건과 꼭 필요한 맥락을 80~100자, 2~3문장으로 전합니다.",
   full: "확인한 기사 원문을 AI 없이 그대로 불러옵니다. 수정해도 원문은 따로 보관됩니다.",
   summary:
     "글머리표 없이 서술형으로 기사 핵심을 약 1/3 분량으로 압축합니다. 핵심 사건 → 근거·배경 → 조건·반론 순서입니다.",

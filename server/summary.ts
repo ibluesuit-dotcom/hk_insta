@@ -26,7 +26,7 @@ import type { Project } from "../shared/model";
 // the editor applies it.
 export type GenFormat = Exclude<PostFormat, "full">;
 const MODEL = "gpt-6-astra";
-const PROMPT_VERSION = "post-text-1.6";
+const PROMPT_VERSION = "post-text-1.7";
 const mock = () => process.env.MOCK_AI === "1";
 const modelName = () => (mock() ? "mock (실제 AI 아님)" : MODEL);
 
@@ -47,7 +47,7 @@ export const generationInstructions = `역할: 한국어 뉴스 편집 보조.
 9. 시청자가 흥미를 느끼도록 짧고 자연스러운 문장으로 쓰되, 원문이 사실로 보도한 내용은 단정형으로 쓰고 '주목된다', '관심이 쏠린다' 같은 편집자 논평을 붙이지 않는다.
 
 형식별 지침:
-short: 핵심 사건과 이해에 꼭 필요한 맥락을 1~3문장 정도로 쓴다. 첫 문장에 누구에게 무엇이 일어났는지 담는다. 전체 기사를 포괄한 것처럼 과장하지 않는다. 낚시성 질문과 해시태그 금지. text에 쓰고 sections는 빈 배열.
+short: 핵심 사건과 이해에 꼭 필요한 맥락을 공백 포함 80~100자, 2~3문장으로 쓴다. 80자보다 짧게 끝내지 않고 100자를 넘기지 않는다. 첫 문장에 누구에게 무엇이 일어났는지 담는다. 전체 기사를 포괄한 것처럼 과장하지 않는다. 낚시성 질문과 해시태그 금지. text에 쓰고 sections는 빈 배열.
 summary: 기사 전체의 핵심을 연결된 서술형 문단으로 쓴다. 글머리표·소제목 목록 금지. 서버가 준 목표 길이는 참고값이다. 핵심→근거/배경→필요한 조건/반론 순서로 작성하되 원문 구조에 맞게 조정한다. 목표 비율을 맞추기 위해 의미를 바꾸지 않는다. 부차적 사례와 반복부터 줄인다. 이탈 이유는 lengthExceptionReason에 쓴다. text에 쓰고 sections는 빈 배열.
 bullets: 방송 화면 자막처럼 쓴다. 논점별 소제목(heading)과 그 아래 핵심 내용(points)을 sections에 쓴다.
 - 소제목: 그 논점의 핵심을 20자 이내 명사구로. 회사명·종목명·인물 이름은 빼지 않는다.
