@@ -109,7 +109,7 @@ test("four formats: full without AI, summary and bullets via candidates, export 
   await page.getByRole("tab", { name: "불릿 요약" }).click();
   await page.getByRole("button", { name: "생성", exact: true }).click();
   await expect(page.getByLabel("불릿 요약 글", { exact: true })).toHaveValue(
-    /^\[모의\] 핵심 1\n- .+\n- .+\n- .+/,
+    /^📈 \[모의\] 핵심 1\n- .+\n- .+\n- .+/,
   );
 
   // Export the summary: preview, caption.txt and manifest follow it.

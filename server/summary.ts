@@ -26,7 +26,7 @@ import type { Project } from "../shared/model";
 // the editor applies it.
 export type GenFormat = Exclude<PostFormat, "full">;
 const MODEL = "gpt-6-astra";
-const PROMPT_VERSION = "post-text-1.4";
+const PROMPT_VERSION = "post-text-1.5";
 const mock = () => process.env.MOCK_AI === "1";
 const modelName = () => (mock() ? "mock (실제 AI 아님)" : MODEL);
 
@@ -56,9 +56,10 @@ bullets: 방송 화면 자막처럼 쓴다. 논점별 소제목(heading)과 그 
 - 불필요한 주어·조사·어미·수식어는 뺀다. 관련 항목은 쉼표(,)로 잇고 단어를 나열할 때는 가운데 점(·)을 쓴다. 수치 범위는 물결표(∼)를 쓸 수 있다.
 - 수치·단위·기간·비교 기준은 그대로 보존하고 결과 수치에는 짧은 배경(기간·기준)을 붙인다. 원문 수치로 방향이 분명할 때만 '↑', '↓'나 '급증', '급감'을 쓴다. '뚝', '곤두박질', '적자 늪' 같은 감각적·비유적 표현이나 과장은 쓰지 않는다.
 - 전망·계획·주장은 '~전망', '~계획', '~예상'처럼 성격을 살리고, 발언·인용은 누가 무엇에 대해 말했는지 맥락을 붙인다. '언급했다', '포함되어 있다' 같은 메타 표현은 쓰지 않는다.
+- icon: 소제목 내용에 맞는 이모지 한 개. 예: 📈 상승·증가, 📉 하락·감소, 🏠 주택·부동산, 🏗️ 공급·건설, 💰 금리·자금·투자, 🏭 산업·기업·실적, 🌏 해외·수출, 📅 일정·발표, ⚠️ 변수·위험, 🏛️ 정책·정부. 🔥😱🚀💥 같은 과장·감정 이모지는 쓰지 않는다. heading에는 이모지를 넣지 않는다.
 - 글머리 기호('-', '•')는 붙이지 않는다(서버가 붙인다). 조건과 반론은 관련 항목 또는 별도 항목에 보존한다. 원문에 없는 전망·투자 포인트를 만들지 않는다. 소제목 자체도 근거가 있어야 한다. text는 빈 문자열.
-예시(형식 참고용, 내용은 기사에 맞게):
-자사주 매입, 10월 초·중순 종료 전망
+예시(형식 참고용, 내용은 기사에 맞게. 이모지는 icon에, 소제목은 heading에 따로 쓴다):
+📅 자사주 매입, 10월 초·중순 종료 전망
 - 삼성전자 취득률 93.46%, 10월 초 종료 전망
 - SK하이닉스 취득률 71.25%, 10월 중순 마무리 예상`;
 
@@ -71,7 +72,7 @@ supported / contradicted / unsupported / ambiguous 중 하나를 판정하라.
 숫자·단위·분모·비교시점·주체·인용귀속·확정성·인과·조건·반론을 확인하라.
 동시에 원문에서 빠지면 오도하는 핵심이 누락됐는지 점검하라.
 short의 제한된 범위와 summary/bullets의 포괄 범위를 구분하라.
-bullets는 방송 자막형 명사구로 쓴다. 서술어 생략·명사형 종결·가운데 점·화살표 같은 형식 자체는 오류가 아니다. 담긴 사실·수치·주체·확정성(전망/확정)만 원문과 대조하라.
+bullets는 방송 자막형 명사구로 쓴다. 서술어 생략·명사형 종결·가운데 점·화살표·소제목 앞 이모지 같은 형식 자체는 오류가 아니다. 담긴 사실·수치·주체·확정성(전망/확정)만 원문과 대조하라.
 
 중요한 숫자·귀속·확정성 오류, 근거 없는 주장 또는 오도하는 누락이면 overall=fail.
 원문 자체가 모호하거나 불완전해 판단할 수 없으면 overall=needs_review.
@@ -133,6 +134,8 @@ export const generationSchema = z
       .array(
         z
           .object({
+            // One emoji that fits the heading, e.g. 📈 🏠 🏗️.
+            icon: z.string(),
             heading: z.string(),
             points: z.array(z.string()).min(1).max(6),
           })
@@ -197,12 +200,18 @@ export function checkGeneration(
           "AI",
         );
 }
-/** "소제목\n- 요점\n- 요점" blocks separated by a blank line. */
+/** Exactly one pictographic emoji (with its variation selector), or 📌. */
+export function headingIcon(icon: string) {
+  const t = icon.trim();
+  const one = [...new Intl.Segmenter().segment(t)];
+  return one.length === 1 && /\p{Extended_Pictographic}/u.test(t) ? t : "📌";
+}
+/** "📈 소제목\n- 요점\n- 요점" blocks separated by a blank line. */
 export const bulletsText = (sections: Generation["sections"]) =>
   sections
     .map((s) =>
       [
-        s.heading.trim(),
+        `${headingIcon(s.icon)} ${s.heading.trim()}`,
         ...s.points
           .map((pt) => pt.trim().replace(/^[-•·]\s*/, ""))
           .filter(Boolean)
@@ -399,6 +408,7 @@ function mockGeneration(
         sections: Array.from(
           { length: Math.ceil(chosen.length / 3) },
           (_, i) => ({
+            icon: "📈",
             heading: `[모의] 핵심 ${i + 1}`,
             points: chosen.slice(i * 3, i * 3 + 3).map((s) => s.text),
           }),
