@@ -13,6 +13,7 @@ import {
 } from "../../shared/post-text";
 import {
   assertSummarizable,
+  captionLengthWarning,
   generatePost,
   loadCandidate,
   modelName,
@@ -66,7 +67,10 @@ postTextRouter.post(
       baseText: postTextOf(p, format),
       options,
       text: generated.text,
-      warnings: generated.out.warnings,
+      warnings: [
+        ...generated.out.warnings,
+        captionLengthWarning(format, generated.out) ?? [],
+      ].flat(),
       omitted: generated.out.omittedCoreFacts.map(
         (o) => `${o.fact} — ${o.reason}`,
       ),

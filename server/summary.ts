@@ -26,7 +26,7 @@ import type { Project } from "../shared/model";
 // the editor applies it.
 export type GenFormat = Exclude<PostFormat, "full">;
 const MODEL = "gpt-6-astra";
-const PROMPT_VERSION = "post-text-1.7";
+const PROMPT_VERSION = "post-text-1.8";
 const mock = () => process.env.MOCK_AI === "1";
 const modelName = () => (mock() ? "mock (실제 AI 아님)" : MODEL);
 
@@ -49,7 +49,9 @@ export const generationInstructions = `역할: 한국어 뉴스 편집 보조.
 형식별 지침:
 short: 핵심 사건과 이해에 꼭 필요한 맥락을 공백 포함 80~100자, 2~3문장으로 쓴다. 80자보다 짧게 끝내지 않고 100자를 넘기지 않는다. 첫 문장에 누구에게 무엇이 일어났는지 담는다. 전체 기사를 포괄한 것처럼 과장하지 않는다. 낚시성 질문과 해시태그 금지. text에 쓰고 sections는 빈 배열.
 summary: 기사 전체의 핵심을 연결된 서술형 문단으로 쓴다. 글머리표·소제목 목록 금지. 서버가 준 목표 길이는 참고값이다. 핵심→근거/배경→필요한 조건/반론 순서로 작성하되 원문 구조에 맞게 조정한다. 목표 비율을 맞추기 위해 의미를 바꾸지 않는다. 부차적 사례와 반복부터 줄인다. 이탈 이유는 lengthExceptionReason에 쓴다. text에 쓰고 sections는 빈 배열.
-bullets: 방송 화면 자막처럼 쓴다. 논점별 소제목(heading)과 그 아래 핵심 내용(points)을 sections에 쓴다.
+bullets: 맨 앞 도입 캡션(text)과 그 뒤 소제목별 불릿(sections)으로 쓴다.
+- text: short와 같은 기준의 짧은 캡션. 공백 포함 80~100자, 2~3문장의 완결된 문장. 불릿 내용을 그대로 반복하지 않고 기사 전체의 핵심 사건을 먼저 전한다.
+- sections: 방송 화면 자막처럼 쓴다. 논점별 소제목(heading)과 그 아래 핵심 내용(points).
 - 소제목: 그 논점의 핵심을 20자 이내 명사구로. 회사명·종목명·인물 이름은 빼지 않는다.
 - 핵심 내용: 소제목마다 2~4개(detail이 brief면 1~2개, detailed면 3~5개). 근거가 적으면 줄이고 개수를 채우려 빈 내용을 만들지 않는다. 각 항목은 그것만 읽어도 이해되게 '누가 무엇을' 또는 '무엇이 어떻게'를 담는다.
 - 각 항목은 25자 내외, 최대 30자의 키워드 중심 명사구로 쓴다. 중요한 맥락이 꼭 필요할 때만 30자를 넘긴다. 주어+서술어 문장으로 쓰지 않고 '~다', '~습니다', '~했어요', '~이다'로 끝내지 않는다. '~전망', '~확대', '~급증', '~예정', '~마무리'처럼 명사형으로 끝낸다.
@@ -57,8 +59,11 @@ bullets: 방송 화면 자막처럼 쓴다. 논점별 소제목(heading)과 그 
 - 수치·단위·기간·비교 기준은 그대로 보존하고 결과 수치에는 짧은 배경(기간·기준)을 붙인다. 원문 수치로 방향이 분명할 때만 '↑', '↓'나 '급증', '급감'을 쓴다. '뚝', '곤두박질', '적자 늪' 같은 감각적·비유적 표현이나 과장은 쓰지 않는다.
 - 전망·계획·주장은 '~전망', '~계획', '~예상'처럼 성격을 살리고, 발언·인용은 누가 무엇에 대해 말했는지 맥락을 붙인다. '언급했다', '포함되어 있다' 같은 메타 표현은 쓰지 않는다.
 - icon: 소제목 내용에 맞는 이모지 한 개. 예: 📈 상승·증가, 📉 하락·감소, 🏠 주택·부동산, 🏗️ 공급·건설, 💰 금리·자금·투자, 🏭 산업·기업·실적, 🌏 해외·수출, 📅 일정·발표, ⚠️ 변수·위험, 🏛️ 정책·정부. 내용에 어울리면 🔥 🚀 😱 💥 같은 강조·감정 이모지도 쓸 수 있다. heading에는 이모지를 넣지 않는다.
-- 글머리 기호('-', '•')는 붙이지 않는다(서버가 붙인다). 조건과 반론은 관련 항목 또는 별도 항목에 보존한다. 원문에 없는 전망·투자 포인트를 만들지 않는다. 소제목 자체도 근거가 있어야 한다. text는 빈 문자열.
-예시(형식 참고용, 내용은 기사에 맞게. 이모지는 icon에, 소제목은 heading에 따로 쓴다):
+- 글머리 기호('-', '•')는 붙이지 않는다(서버가 붙인다). 조건과 반론은 관련 항목 또는 별도 항목에 보존한다. 원문에 없는 전망·투자 포인트를 만들지 않는다. 소제목 자체도 근거가 있어야 한다.
+예시(형식 참고용, 내용은 기사에 맞게. 캡션은 text에, 이모지는 icon에, 소제목은 heading에 따로 쓴다. 서버가 캡션 뒤에 빈 줄 두 개를 넣고 불릿을 붙인다):
+삼성전자와 SK하이닉스의 자사주 매입이 10월 중 마무리될 전망입니다. 삼성전자 취득률은 93.46%, SK하이닉스는 71.25%입니다.
+
+
 📅 자사주 매입, 10월 초·중순 종료 전망
 - 삼성전자 취득률 93.46%, 10월 초 종료 전망
 - SK하이닉스 취득률 71.25%, 10월 중순 마무리 예상`;
@@ -178,7 +183,7 @@ const fail = (message: string, code = "INPUT", status = 400) =>
 
 /**
  * Format rules the model cannot bend: short/summary answer in text only,
- * bullets in sections only; every quote sits in the segment it names.
+ * bullets with a lead caption in text and the points in sections; every quote sits in the segment it names.
  */
 export function checkGeneration(
   format: GenFormat,
@@ -187,7 +192,7 @@ export function checkGeneration(
 ) {
   if (
     format === "bullets"
-      ? out.text.trim() || !out.sections.length
+      ? !out.text.trim() || !out.sections.length
       : out.sections.length || !out.text.trim()
   )
     throw fail("AI 응답 형식이 요청과 다릅니다. 다시 생성하세요.", "AI");
@@ -219,8 +224,19 @@ export const bulletsText = (sections: Generation["sections"]) =>
       ].join("\n"),
     )
     .join("\n\n");
+/** The short caption (alone or leading bullets) aims at 80~100 characters. */
+export function captionLengthWarning(format: GenFormat, out: Generation) {
+  if (format === "summary") return null;
+  const n = measure(out.text.trim());
+  return n < 80 || n > 100
+    ? `${format === "bullets" ? "맨 앞 캡션" : "캡션"}이 ${n}자입니다(목표 80~100자).`
+    : null;
+}
+/** Bullets open with the short lead caption, two empty lines, then the points. */
 export function candidateText(format: GenFormat, out: Generation) {
-  return format === "bullets" ? bulletsText(out.sections) : out.text.trim();
+  return format === "bullets"
+    ? `${out.text.trim()}\n\n\n${bulletsText(out.sections)}`
+    : out.text.trim();
 }
 
 /** Server guard on top of the model's verdict: a contradiction always fails. */
@@ -403,7 +419,7 @@ function mockGeneration(
   return format === "bullets"
     ? {
         ...base,
-        text: "",
+        text: "[모의] " + chosen[0].text,
         // Three points per heading, the way the real format reads.
         sections: Array.from(
           { length: Math.ceil(chosen.length / 3) },

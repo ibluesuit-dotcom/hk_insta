@@ -14,6 +14,8 @@ import {
 } from "../shared/post-text";
 import {
   bulletsText,
+  candidateText,
+  captionLengthWarning,
   checkGeneration,
   segments,
   toReview,
@@ -128,9 +130,13 @@ test("generation format and every quote are checked against the segments", () =>
   const wrongSegment = structuredClone(base);
   wrongSegment.claims[0].evidence[0].segmentId = "s2";
   assert.throws(() => checkGeneration("summary", wrongSegment, segs), /근거/);
+  assert.throws(
+    () => checkGeneration("bullets", { ...base, text: "", sections: [{ icon: "📈", heading: "수출", points: ["10% 증가"] }] }, segs),
+    /형식/,
+  );
   const bullets = {
     ...base,
-    text: "",
+    text: "수출이 10% 늘었다.",
     sections: [
       { icon: "📈", heading: "수출", points: ["10% 증가", "- 반도체가 견인"] },
       { icon: "🔥🔥", heading: "전망", points: ["정부는 증가 예상"] },
@@ -141,6 +147,16 @@ test("generation format and every quote are checked against the segments", () =>
     bulletsText(bullets.sections),
     "📈 수출\n- 10% 증가\n- 반도체가 견인\n\n📌 전망\n- 정부는 증가 예상",
   );
+  assert.equal(
+    candidateText("bullets", bullets),
+    "수출이 10% 늘었다.\n\n\n📈 수출\n- 10% 증가\n- 반도체가 견인\n\n📌 전망\n- 정부는 증가 예상",
+  );
+  assert.match(captionLengthWarning("bullets", bullets) ?? "", /맨 앞 캡션이 12자/);
+  assert.equal(
+    captionLengthWarning("short", { ...base, text: "가".repeat(90) }),
+    null,
+  );
+  assert.equal(captionLengthWarning("summary", base), null);
 });
 
 test("a contradiction always fails; a serious unsupported claim needs review", () => {
