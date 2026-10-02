@@ -173,7 +173,7 @@ function CardActions({ s }: { s: Studio }) {
       )}
       <button
         className="tiny"
-        disabled={!!busy || p.count <= 1}
+        disabled={!!busy || (p.postType === "photo" && p.count <= 1)}
         onClick={() => {
           if (
             window.confirm(

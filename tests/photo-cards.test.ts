@@ -14,6 +14,7 @@ import {
   photoStyleOf,
   removePage,
   textView,
+  isPhotoPage,
   withStyle,
   type Page,
   type Project,
@@ -56,6 +57,16 @@ test("the AI text view holds only text cards with renumbered locks", () => {
     ["하나", "셋"],
   );
   assert.deepEqual(view.locks, { "page:1": true, headline: true });
+});
+
+test("with no text card the AI is asked for the cover only", () => {
+  const p = mixed();
+  p.copy.pages = p.copy.pages.filter(isPhotoPage);
+  p.count = p.copy.pages.length;
+  const { view, map } = textView(p);
+  assert.deepEqual(view.copy.pages, []);
+  assert.equal(view.count, 0);
+  assert.deepEqual(map, []);
 });
 
 test("AI results go back to text cards; photo cards and stored text stay", () => {

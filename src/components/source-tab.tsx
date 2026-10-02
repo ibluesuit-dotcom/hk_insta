@@ -271,8 +271,15 @@ export function SourceTab({ s }: { s: Studio }) {
             value={p.count}
             onChange={(e) => {
               const count = Number(e.target.value);
+              // Dropping only blank cards needs no confirmation.
+              const dropsContent = p.copy.pages
+                .slice(count)
+                .some(
+                  (pg, k) => !blankTextPage(pg, !!p.locks[`page:${count + k}`]),
+                );
               if (
                 count < p.count &&
+                dropsContent &&
                 !window.confirm(
                   `카드 ${count + 2}~${p.count + 1}을(를) 삭제할까요? 해당 카드의 문안·사진 설정과 잠금이 삭제됩니다${
                     p.copy.pages.slice(count).some((pg) => pg.kind === "photo")
@@ -287,7 +294,7 @@ export function SourceTab({ s }: { s: Studio }) {
               s.setIndex(0);
             }}
           >
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
               <option key={n} value={n}>
                 {n}장
               </option>

@@ -28,7 +28,7 @@ export const copySchema = z.object({
   headlineEvidence: z.array(z.string().min(1)).min(1),
   kickerEvidence: z.array(z.string().min(1)),
   kickerOrigin: z.enum(["원문 그대로", "축약", "본문 기반 작성", "생략"]),
-  pages: z.array(pageSchema).min(1).max(8),
+  pages: z.array(pageSchema).max(8),
   keywords: z
     .array(
       z.object({
@@ -326,7 +326,7 @@ export const draftCopySchema = copySchema
     headline: z.string().max(404),
     headlineEvidence: z.array(z.string().max(60000)).max(100),
     kickerEvidence: z.array(z.string().max(60000)).max(100),
-    pages: z.array(draftPage).min(1).max(8),
+    pages: z.array(draftPage).max(8),
     keywords: z
       .array(
         z
@@ -370,7 +370,7 @@ export const projectSchema = z
     direction: draftText,
     appliedDirection: draftText,
     partialDirection: draftText,
-    count: z.number().int().min(1).max(8),
+    count: z.number().int().min(0).max(8),
     copy: draftCopySchema,
     locks: z.record(
       z
@@ -578,16 +578,13 @@ export function cardAlt(p: Project, i: number) {
 /**
  * The project as the AI sees it: only active text cards, with their locks
  * renumbered. `map[j]` is the real page index of view page j. With no text
- * card a blank placeholder keeps the cover generation schema valid; its
- * result is never mapped back.
+ * card the AI writes the cover only.
  */
 export function textView(p: Project) {
   const map = p.copy.pages.flatMap((pg, i) => (isPhotoPage(pg) ? [] : [i]));
   const view = structuredClone(p);
   // The AI sees text fields only: no card ID, kind or stored photo.
-  view.copy.pages = (
-    map.length ? map.map((i) => p.copy.pages[i]) : [emptyPage()]
-  ).map(({ role, title, body, highlight, evidence, alt }) => ({
+  view.copy.pages = map.map((i) => p.copy.pages[i]).map(({ role, title, body, highlight, evidence, alt }) => ({
     role,
     title,
     body,
@@ -616,7 +613,7 @@ export function expandTextCopy(p: Project, viewCopy: Copy, map: number[]) {
 }
 /** Removes following card i with its lock; later locks shift down. */
 export function removePage(p: Project, i: number) {
-  if (p.count <= 1 || i < 0 || i >= p.count) return p;
+  if (i < 0 || i >= p.count) return p;
   p.copy.pages.splice(i, 1);
   const locks: Record<string, boolean> = {};
   for (const [k, v] of Object.entries(p.locks)) {
